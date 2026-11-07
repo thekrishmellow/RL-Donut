@@ -1,0 +1,16 @@
+[project]
+name = "rl-donut"
+version = "0.1.0"
+description = "Self-evolving multi-agent RL arena inspired by Mini Militia"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
