@@ -21,11 +21,12 @@ works if:
 flowchart TD
     S[Master seed] --> P[1. Seeded streams<br/>seeding.py]
     P --> Q[Per-map parameters<br/>terrain.sample_params]
-    P --> N[2. Perlin + FBM noise<br/>noise.py]
+    P --> N[2. Perlin + FBM noise, left half<br/>noise.py]
+    N --> MI[Mirror to full width<br/>terrain.map_noise]
     Q --> T[3. Threshold to rock/air<br/>terrain.threshold]
-    N --> T
-    T --> C[4. Cellular-automata smoothing]
-    C --> M[5. Borders + mirroring]
+    MI --> T
+    T --> C[4. Cellular-automata smoothing<br/>terrain.smooth]
+    C --> M[5. Borders + bottom pits]
     M --> PL[6. Platforms + corridors]
     PL --> CN[7. Connectivity + spawn points]
     CN --> V[8. Validation + retry]
@@ -36,9 +37,9 @@ flowchart TD
 |---|---|---|
 | 1. Seeded streams | done | `src/rl_donut/mapgen/seeding.py` |
 | 2. Perlin + FBM | done | `src/rl_donut/mapgen/noise.py` |
-| 3. Threshold | done | `src/rl_donut/mapgen/terrain.py` |
-| 4. Smoothing | next | — |
-| 5. Borders + mirroring | planned | — |
+| 3. Mirroring + threshold | done | `src/rl_donut/mapgen/terrain.py` |
+| 4. Smoothing | done | `src/rl_donut/mapgen/terrain.py` |
+| 5. Borders + bottom pits | next | — |
 | 6. Platforms + corridors | planned | — |
 | 7. Connectivity + spawns | planned | — |
 | 8. Validation + retry | planned | — |
@@ -152,10 +153,28 @@ rejected, golden values.
 
 ---
 
-## Step 3: Threshold to a rock/air grid (`terrain.py`)
+## Step 3: Mirroring and threshold to a rock/air grid (`terrain.py`)
 
 **Purpose.** Turn continuous noise into tiles: `ROCK = 1`, `AIR = 0`, stored as `uint8`
 so more tile types can be added later.
+
+**Mirroring first (`map_noise`).** Only the left half of the noise is generated. It is
+reflected to form the right half *before* thresholding, so the whole map is left/right
+symmetric and neither side has an advantage:
+
+```python
+half_width = (cfg.width + 1) // 2
+left = fbm(half_width, cfg.height, cfg.noise, rng)
+right = left[:, : cfg.width - half_width][:, ::-1]
+return np.hstack([left, right])
+```
+
+Odd widths get a single shared centre column. `TerrainConfig.mirror = False` produces
+asymmetric maps, reserved for out-of-distribution evaluation.
+
+Why mirror the *noise* and not a finished half map: smoothing a half map treats the centre
+line as the map edge (rock), which grows a wall down the middle. Why left/right and not a 180°
+rotation: with height bias, a rotation would give one side the ground and the other the sky.
 
 **Per-map parameters.** `sample_params(seed, cfg)` draws two values from the `PARAMS` stream:
 
@@ -176,7 +195,9 @@ cutoff = np.sort(biased, axis=None)[biased.size - n_rock]
 grid = np.where(biased >= cutoff, ROCK, AIR)
 ```
 
-The `n_rock` highest tiles become rock, so the rock fraction is exact.
+The `n_rock` highest tiles become rock, so the rock fraction is exact. With mirroring,
+every noise value appears twice, so rock is added in mirrored pairs and an odd target
+count comes out one tile over.
 
 **Why a quantile cutoff, not a fixed one.** Measured over 1,000 seeds, a fixed cutoff
 tuned for a 40% average gave anything from 31% to 50% rock per map. That is uncontrolled
@@ -186,10 +207,54 @@ later report results by density.
 **Why parameters get their own stream.** Drawing them from `TERRAIN` would shift the noise
 gradients and change every map's noise.
 
-**Tests** (`tests/test_terrain.py`): exact rock fraction, rock sits where noise is highest,
-sampled values cover their ranges, retries resample, height bias adds rock at the bottom
-without changing the total, no bias is balanced on average, invalid ranges rejected,
-golden grid fingerprint for seed 42.
+**Tests** (`tests/test_terrain.py`): exact rock fraction without mirroring (within one tile
+with it), rock sits where noise is highest, sampled values cover their ranges, retries
+resample, height bias adds rock at the bottom without changing the total, no bias is
+balanced on average, maps are symmetric for even and odd widths, `mirror=False` is
+asymmetric, invalid ranges rejected.
+
+---
+
+## Step 4: Cellular-automata smoothing (`terrain.py`)
+
+**Purpose.** Remove single-tile specks, spikes and jagged edges left by the finest noise
+octaves, while keeping the large shapes.
+
+**How it works.** Each pass counts every tile's rock neighbours (of 8) and takes a local
+majority vote:
+
+| Rock neighbours | New tile |
+|---|---|
+| ≥ 5 (`smooth_rock_min`) | rock |
+| ≤ 3 (`smooth_air_max`) | air |
+| exactly 4 | unchanged |
+
+```python
+counts = rock_neighbours(grid)          # outside the map counts as rock
+grid = np.where(counts >= rock_min, ROCK, np.where(counts <= air_max, AIR, grid))
+```
+
+Leaving ties unchanged keeps the rock fraction stable. The rule treats left and right
+identically, so mirrored maps stay symmetric.
+
+**Why 3 passes.** Measured over 200 seeds, "rough" tiles (lone rock with ≤ 2 rock neighbours,
+or lone air with ≥ 6) dropped from 72 per map to 7, 2 and then 1 after passes 1, 2 and 3.
+More passes barely change the map.
+
+**Rock fraction drift.** Smoothing shifts the rock fraction by about +1% on average
+(−1.5% to +3.4% over 300 seeds). We accept this and keep both numbers: the sampled target
+in `Terrain.params.rock_fraction` and the actual value in `Terrain.final_rock_fraction`.
+
+**Alternatives considered.** Blurring the noise before the cutoff is equivalent to using
+fewer octaves and doesn't guarantee specks disappear. Morphological erode/dilate is harsher
+and can cut thin rock bridges, splitting the map.
+
+**Output.** `terrain_grid(seed, cfg)` returns a `Terrain` with `grid` and `params`.
+
+**Tests** (`tests/test_terrain.py`): neighbour count treats outside as rock, lone specks are
+removed in one pass, ties are left unchanged, zero passes changes nothing, smoothed maps
+average ≤ 3 rough tiles, drift stays under 5%, invalid smoothing settings rejected, golden
+grid fingerprint for seed 42.
 
 ---
 

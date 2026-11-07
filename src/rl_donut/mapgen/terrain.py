@@ -1,4 +1,4 @@
-"""Noise -> rock/air tile grid with an exact, per-seed rock fraction."""
+"""Noise -> mirrored, smoothed rock/air tile grid."""
 
 from dataclasses import dataclass
 
@@ -19,6 +19,17 @@ class MapParams:
     height_bias: float
 
 
+@dataclass(frozen=True)
+class Terrain:
+    grid: np.ndarray
+    params: MapParams
+
+    @property
+    def final_rock_fraction(self) -> float:
+        """Rock share after smoothing; differs slightly from params.rock_fraction."""
+        return float(self.grid.mean())
+
+
 def sample_params(seed: int, cfg: MapConfig, attempt: int = 0) -> MapParams:
     rng = make_rng(seed, Stream.PARAMS, attempt)
     return MapParams(
@@ -27,8 +38,23 @@ def sample_params(seed: int, cfg: MapConfig, attempt: int = 0) -> MapParams:
     )
 
 
+def map_noise(seed: int, cfg: MapConfig, attempt: int = 0) -> np.ndarray:
+    """FBM noise for the full map; with mirroring, only the left half is generated and reflected."""
+    rng = make_rng(seed, Stream.TERRAIN, attempt)
+    if not cfg.terrain.mirror:
+        return fbm(cfg.width, cfg.height, cfg.noise, rng)
+    half_width = (cfg.width + 1) // 2
+    left = fbm(half_width, cfg.height, cfg.noise, rng)
+    right = left[:, : cfg.width - half_width][:, ::-1]
+    return np.hstack([left, right])
+
+
 def threshold(noise: np.ndarray, rock_fraction: float, height_bias: float) -> np.ndarray:
-    """Mark the highest-valued tiles as rock so exactly ``rock_fraction`` of the grid is solid."""
+    """Mark the highest-valued tiles as rock so ``rock_fraction`` of the grid is solid.
+
+    Exact for unique noise values. Mirrored noise repeats every value, so rock is added in
+    pairs and an odd target count comes out one tile over.
+    """
     height = noise.shape[0]
     depth = (np.arange(height) / max(height - 1, 1) - 0.5)[:, None]
     biased = noise + height_bias * depth
@@ -39,7 +65,28 @@ def threshold(noise: np.ndarray, rock_fraction: float, height_bias: float) -> np
     return np.where(biased >= cutoff, ROCK, AIR)
 
 
-def terrain_grid(seed: int, cfg: MapConfig, attempt: int = 0) -> tuple[np.ndarray, MapParams]:
+def rock_neighbours(grid: np.ndarray) -> np.ndarray:
+    """Count of rock tiles among the 8 neighbours; tiles outside the map count as rock."""
+    height, width = grid.shape
+    padded = np.pad(grid, 1, constant_values=ROCK).astype(np.int8)
+    return sum(
+        padded[1 + dy: 1 + dy + height, 1 + dx: 1 + dx + width]
+        for dy in (-1, 0, 1)
+        for dx in (-1, 0, 1)
+        if (dy, dx) != (0, 0)
+    )
+
+
+def smooth(grid: np.ndarray, passes: int, rock_min: int = 5, air_max: int = 3) -> np.ndarray:
+    for _ in range(passes):
+        counts = rock_neighbours(grid)
+        grid = np.where(counts >= rock_min, ROCK, np.where(counts <= air_max, AIR, grid))
+    return grid
+
+
+def terrain_grid(seed: int, cfg: MapConfig, attempt: int = 0) -> Terrain:
     params = sample_params(seed, cfg, attempt)
-    noise = fbm(cfg.width, cfg.height, cfg.noise, make_rng(seed, Stream.TERRAIN, attempt))
-    return threshold(noise, params.rock_fraction, params.height_bias), params
+    grid = threshold(map_noise(seed, cfg, attempt), params.rock_fraction, params.height_bias)
+    t = cfg.terrain
+    grid = smooth(grid, t.smooth_passes, t.smooth_rock_min, t.smooth_air_max)
+    return Terrain(grid=grid, params=params)

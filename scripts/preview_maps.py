@@ -26,10 +26,11 @@ def main():
     for ax in axes.flat:
         ax.axis("off")
     for ax, seed in zip(axes.flat, range(args.start, args.start + args.count)):
-        grid, params = terrain_grid(seed, cfg)
-        ax.imshow(grid, cmap="Greys", interpolation="nearest", vmin=0, vmax=1)
-        ax.set_title(f"seed {seed}: {params.rock_fraction:.0%} rock, bias {params.height_bias:.2f}",
-                     fontsize=10)
+        terrain = terrain_grid(seed, cfg)
+        params = terrain.params
+        ax.imshow(terrain.grid, cmap="Greys", interpolation="nearest", vmin=0, vmax=1)
+        ax.set_title(f"seed {seed}: rock {params.rock_fraction:.0%} -> {terrain.final_rock_fraction:.0%}, "
+                     f"bias {params.height_bias:.2f}", fontsize=10)
     fig.suptitle("Generated terrain (black = rock)", fontsize=13)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

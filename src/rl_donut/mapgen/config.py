@@ -30,6 +30,13 @@ class TerrainConfig:
     rock_fraction: tuple[float, float] = (0.40, 0.55)
     # Shift added to the noise that grows linearly from -bias/2 at the top to +bias/2 at the bottom.
     height_bias: tuple[float, float] = (0.0, 0.3)
+    # Left/right mirror symmetry for fairness; asymmetric maps are reserved for OOD evaluation.
+    mirror: bool = True
+    # Cellular-automata smoothing: a tile becomes rock with >= smooth_rock_min rock neighbours (of 8),
+    # air with <= smooth_air_max, and is unchanged in between.
+    smooth_passes: int = 3
+    smooth_rock_min: int = 5
+    smooth_air_max: int = 3
 
     def __post_init__(self):
         lo, hi = self.rock_fraction
@@ -38,6 +45,10 @@ class TerrainConfig:
         lo, hi = self.height_bias
         if not 0 <= lo <= hi:
             raise ValueError("height_bias must satisfy 0 <= low <= high")
+        if self.smooth_passes < 0:
+            raise ValueError("smooth_passes must be >= 0")
+        if not 0 <= self.smooth_air_max < self.smooth_rock_min <= 8:
+            raise ValueError("smoothing needs 0 <= smooth_air_max < smooth_rock_min <= 8")
 
 
 @dataclass(frozen=True)
