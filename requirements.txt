@@ -1,3 +1,4 @@
 # numpy is pinned exactly: map generation depends on its random streams.
 numpy==2.5.4
 pytest==9.2.0
+matplotlib==3.11.2

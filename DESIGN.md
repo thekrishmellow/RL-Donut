@@ -22,7 +22,7 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 ### Phase 1 steps
 
 1. Seed system — done
-2. Perlin noise + FBM
+2. Perlin noise + FBM — done
 3. Quantile threshold to tile grid
 4. Cellular-automata smoothing
 5. Borders + left/right mirroring
@@ -44,6 +44,8 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M3 | Reproducibility | Pin numpy, `GENERATOR_VERSION`, golden-value tests, cache val/test maps to disk | numpy only guarantees identical streams on the same build |
 | M4 | Flood-fill connectivity | 4-connectivity on "agent fits" tiles (open tile with open tile above; agent slot is 1×2) | Diagonal corners and 1-tile-high cracks are not passable |
 | M5 | Jetpack reachability | Standing-spot graph with a fuel/climb budget must be strongly connected (every spot reachable and returnable) | Falling is free but climbing costs fuel, so deep smooth pits are traps; approximation gets validated against real physics in Phase 2 |
+| M7 | Noise parameters | Random-angle unit gradients, quintic fade, 16×10 tile cells (stretched horizontally), 4 octaves, persistence 0.5, lacunarity 2 | Quintic removes visible cell-edge creases; stretched cells give ledge/shelf shapes suited to a side-scroller |
+| E2 | Preview images | matplotlib (scripts only, never imported by the generator) | Labeled grids and colorbars; reused for training charts later |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits (planned)
