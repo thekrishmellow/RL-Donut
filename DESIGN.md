@@ -23,7 +23,7 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 
 1. Seed system — done
 2. Perlin noise + FBM — done
-3. Quantile threshold to tile grid
+3. Quantile threshold to tile grid — done
 4. Cellular-automata smoothing
 5. Borders + left/right mirroring
 6. Platforms and corridors
@@ -45,6 +45,9 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M4 | Flood-fill connectivity | 4-connectivity on "agent fits" tiles (open tile with open tile above; agent slot is 1×2) | Diagonal corners and 1-tile-high cracks are not passable |
 | M5 | Jetpack reachability | Standing-spot graph with a fuel/climb budget must be strongly connected (every spot reachable and returnable) | Falling is free but climbing costs fuel, so deep smooth pits are traps; approximation gets validated against real physics in Phase 2 |
 | M7 | Noise parameters | Random-angle unit gradients, quintic fade, 16×10 tile cells (stretched horizontally), 4 octaves, persistence 0.5, lacunarity 2 | Quintic removes visible cell-edge creases; stretched cells give ledge/shelf shapes suited to a side-scroller |
+| M8 | Rock cutoff | Quantile threshold (exact rock fraction), fraction sampled per seed: train 40–55%, OOD 30–35% / 60–65% | A fixed threshold gave 31–50% rock across 1,000 seeds at a 40% average; sampling keeps variety but makes it controlled and measurable |
+| M9 | Height bias | Linear bias toward rock at the bottom, sampled per seed from 0.0–0.3 | Ground below, open sky above, like Mini Militia; sampling stops the agent assuming the ground is always at the bottom |
+| M10 | Per-map parameters | Drawn from a dedicated `PARAMS` stream | Keeps the `TERRAIN` noise stream unchanged |
 | E2 | Preview images | matplotlib (scripts only, never imported by the generator) | Labeled grids and colorbars; reused for training charts later |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 

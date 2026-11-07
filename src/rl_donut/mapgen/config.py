@@ -25,7 +25,24 @@ class NoiseConfig:
 
 
 @dataclass(frozen=True)
+class TerrainConfig:
+    # Per-seed values are drawn uniformly from these (low, high) ranges.
+    rock_fraction: tuple[float, float] = (0.40, 0.55)
+    # Shift added to the noise that grows linearly from -bias/2 at the top to +bias/2 at the bottom.
+    height_bias: tuple[float, float] = (0.0, 0.3)
+
+    def __post_init__(self):
+        lo, hi = self.rock_fraction
+        if not 0 < lo <= hi < 1:
+            raise ValueError("rock_fraction must satisfy 0 < low <= high < 1")
+        lo, hi = self.height_bias
+        if not 0 <= lo <= hi:
+            raise ValueError("height_bias must satisfy 0 <= low <= high")
+
+
+@dataclass(frozen=True)
 class MapConfig:
     width: int = 96
     height: int = 48
     noise: NoiseConfig = field(default_factory=NoiseConfig)
+    terrain: TerrainConfig = field(default_factory=TerrainConfig)
