@@ -314,8 +314,8 @@ lower step rate; Phase 3's speed benchmark decides.
 
 ### Version control and CI
 
-- Git, one commit per approved step. **No remote yet**: the repository exists only on
-  this laptop, so a remote (GitHub or Origin) is needed before friends join, and as a backup.
+- Git, one commit per approved step, pushed to
+  [github.com/thekrishmellow/RL-Donut](https://github.com/thekrishmellow/RL-Donut).
 - No CI yet. Once a remote exists, run the test suite on every push; the full suite takes
   ~6 minutes on a busy laptop, so slow tests may need a marker.
 
@@ -337,7 +337,7 @@ contracts in section 4 exist so each area can be built against them independentl
 | Reward exploits (camping, spawn camping, spam) | Exploit watchlist from the first run |
 | 2v2 not ready | 1v1 still covers multi-agent learning and self-play |
 | Disk fills with checkpoints | Keep only pool members and milestones; prune automatically |
-| Only one copy of the work | Add a git remote (open decision) |
+| Only one copy of the work | Pushed to GitHub after every step |
 
 ## 9. Open decisions
 
@@ -350,4 +350,4 @@ contracts in section 4 exist so each area can be built against them independentl
 | PyTorch, PettingZoo, renderer, tracker, dashboard tool | Their phases | Section 6 |
 | Compute targets (environments, steps/s) | Phase 3 | Section 7 |
 | OOD split definitions | Phase 8 | M49 |
-| Git remote and CI | Any time; before friends join | Section 7 |
+| CI (tests on every push) | Any time; before friends join | Section 7 |
