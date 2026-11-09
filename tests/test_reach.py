@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from rl_donut.mapgen import AIR, ROCK, MapConfig, generate_map
+from rl_donut.mapgen import AIR, ROCK, MapConfig
 from rl_donut.mapgen.reach import (
     analyse_reachability, floor_segments, occupiable_tiles, standing_spots, transitive_closure,
 )
@@ -106,8 +106,8 @@ def test_air_far_above_the_main_floor_is_not_occupiable():
 # --- generated maps ---
 
 @pytest.fixture(scope="module")
-def maps():
-    return [generate_map(s, CFG) for s in range(30)]
+def maps(generated_maps):
+    return generated_maps[:30]
 
 
 def test_recorded_reachability_matches_the_grid(maps):

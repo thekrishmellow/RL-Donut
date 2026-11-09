@@ -1,4 +1,4 @@
-"""Render a sheet of generated maps for a range of seeds to outputs/maps_preview.png."""
+"""Render a sheet of validated maps (or first attempts with --raw) to outputs/maps_preview.png."""
 
 import argparse
 from pathlib import Path
@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch, Rectangle
 
-from rl_donut.mapgen import MapConfig, generate_map
+from rl_donut.mapgen import MapConfig, generate_map, generate_valid_map
 
 # Tile classes drawn in the preview.
 AIR, ROCK, DUG, FILLED, PLATFORM, UNREACHABLE, PIT = 0, 1, 2, 3, 4, 5, 6
@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--count", type=int, default=8)
     parser.add_argument("--cols", type=int, default=4)
     parser.add_argument("--plain", action="store_true", help="draw only rock and air")
+    parser.add_argument("--raw", action="store_true", help="show first attempts instead of validated maps")
     parser.add_argument("--out", type=Path, default=Path("outputs/maps_preview.png"))
     args = parser.parse_args()
 
@@ -34,7 +35,7 @@ def main():
     for ax in axes.flat:
         ax.axis("off")
     for ax, seed in zip(axes.flat, range(args.start, args.start + args.count)):
-        game_map = generate_map(seed, cfg)
+        game_map = generate_map(seed, cfg) if args.raw else generate_valid_map(seed, cfg)
         image = game_map.grid.astype(int)
         if not args.plain:
             image[game_map.layers["dug"]] = DUG
@@ -55,7 +56,7 @@ def main():
             status = f"{game_map.stranded_fraction:.0%} stranded" + ("" if game_map.trap_free else ", TRAP")
         pits = f"{len(game_map.pits)}/{game_map.pits_requested} pits"
         spawns = f"{len(game_map.spawns.team_a)}/{cfg.spawns.per_team} spawns"
-        ax.set_title(f"seed {seed}: {game_map.tunnels} tunnels, {pits}, {len(game_map.platforms)} platforms, "
+        ax.set_title(f"seed {seed} (attempt {game_map.attempt}): {pits}, {len(game_map.platforms)} platforms, "
                      f"{spawns}, {status}", fontsize=8)
     if not args.plain:
         fig.legend(handles=[Patch(color=COLOURS[DUG], label="tunnel dug"),

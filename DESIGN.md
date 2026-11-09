@@ -31,7 +31,7 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
    - 7a. Jetpack reachability + floating platforms — done
    - 7b. Bottom pits — done (runs before 7a in the pipeline)
    - 7c. Spawn points — done
-8. Validation (reachability acceptance, fairness, line of sight) + retry
+8. Validation + retry — done
 9. Batch generation, seed splits, cache, stats report
 
 ## Decisions
@@ -51,7 +51,7 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M7 | Noise parameters | Random-angle unit gradients, quintic fade, 16×10 tile cells (stretched horizontally), 4 octaves, persistence 0.5, lacunarity 2 | Quintic removes visible cell-edge creases; stretched cells give ledge/shelf shapes suited to a side-scroller |
 | M8 | Rock cutoff | Quantile threshold (exact rock fraction), fraction sampled per seed: train 40–55%, OOD 30–35% / 60–65% | A fixed threshold gave 31–50% rock across 1,000 seeds at a 40% average; sampling keeps variety but makes it controlled and measurable |
 | M9 | Height bias | Linear bias toward rock at the bottom, sampled per seed from 0.0–0.3 | Ground below, open sky above, like Mini Militia; sampling stops the agent assuming the ground is always at the bottom |
-| M10 | Per-map parameters | Drawn from a dedicated `PARAMS` stream | Keeps the `TERRAIN` noise stream unchanged |
+| M10 | Per-map parameters | Drawn from a dedicated `PARAMS` stream, always at attempt 0 (M41); includes the pit count | Keeps the `TERRAIN` noise stream unchanged |
 | M12 | Smoothing | Cellular automata, 3 passes: rock if ≥ 5 of 8 neighbours are rock, air if ≤ 3, unchanged at 4; outside the map counts as rock | Rough tiles per map fell 72 → 1 by pass 3, with little change after; gentler than erode/dilate, which can cut thin bridges |
 | M13 | Mirror order | Generate left-half noise, mirror it, then threshold and smooth the full map | Smoothing a half map treats the seam as rock and grows a wall down the centre; the smoothing rule is symmetric, so symmetry survives every later step |
 | M14 | Symmetry type | Left/right mirror (not 180° rotation) | With height bias, rotation would give one side the ground and the other the sky |
@@ -65,7 +65,7 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M22 | Dead air | Fill every air tile no agent box in the main region can cover | Sealed bubbles and thin cracks are unusable; cracks would let bullets through gaps no agent can enter; what you see is exactly the playable space |
 | M23 | Centre crossings | At least 2 separate routes across the centre line, or one opening ≥ 12 rows tall; extra crossings dug ≥ 6 rows from existing ones | A single narrow choke point makes camping it the dominant strategy. The first rule counted a 35–44-row open centre as "1 route" on 39 of 300 maps; those are wide open, not choke points |
 | M24 | Step order | Step 6 = regions and corridors; step 7 = platforms, pits, spawns | Joining regions is the connectivity work; platforms must be placed in the final open spaces without blocking tunnels |
-| M11 | Falling off the map | 0–2 bottom pits per seed (3–6 tiles wide, own `PITS` stream); engine kill line below the map is always on; curriculum starts with 0 pits | Fall deaths teach fuel management; sampling stops the agent assuming either layout; the kill line is also a safety net for physics bugs |
+| M11 | Falling off the map | 0–2 bottom pits per seed (3–6 tiles wide; count is a per-seed parameter, positions from the `PITS` stream); engine kill line below the map is always on; curriculum starts with 0 pits | Fall deaths teach fuel management; sampling stops the agent assuming either layout; the kill line is also a safety net for physics bugs |
 | G4 | Kill credit for falls | Deferred to Phase 5 (rewards) | It is a reward-design question |
 | E2 | Preview images | matplotlib (scripts only, never imported by the generator) | Labeled grids and colorbars; reused for training charts later |
 | M25 | Step 7 split | 7a platforms + reachability, 7b pits, 7c spawns | Each piece is testable on its own; pits and spawns depend on knowing which floors are reachable |
@@ -84,6 +84,10 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M38 | Spawn rules | No line of sight to any enemy spawn (either direction); ≥ 6 tiles from pits; ≥ 16 tiles from the centre line; ≥ 6 tiles between same-team spawns | Prevents spawn kills and spawning into hazards. Spacing 8 fit only 82.5% of maps; 6 (three agent widths) fits 92% |
 | M39 | Spawn selection | Random order from the `SPAWNS` stream, keeping spots that pass every rule | Farthest-point picking repeats the same pattern on every map, which agents could memorise |
 | M40 | Line of sight | Exact grid walk (Amanatides–Woo), corners check both side tiles; shared in `geometry.py` and to be reused by Phase 2 hitscan | Quarter-tile sampling missed 46 of 10,000 corner clips; one function means "can't see" and "can't be shot" always agree |
+| M41 | Fixed design settings | A seed's rock fraction, height bias and pit count (`MapParams`) come from attempt 0; retries re-draw only geometry | Pass rates depend on these settings (34% with a centred pit vs 93% with none); re-drawing them would skew kept maps to a 49/18/34% pit mix and favour low rock. Costs 1.97 vs ~1.6 attempts per map |
+| M42 | Validation checks | Reject on trap, > 2% stranded floor, pit shortfall, spawn shortfall; plus safety re-checks of symmetry, one region + crossings, and the border | The first four are the acceptance rules from M31, M36, M37; the re-checks are cheap and catch future bugs |
+| M43 | Retry cap | 30 attempts per seed, then `MapGenerationError` | Worst seen in 3,000 seeds was 24; expected ~0.1 seeds per 12,000 hit the cap |
+| M44 | Minimum open space | No check | Only 0.2% of maps have under 30% air |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits (planned)

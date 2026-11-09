@@ -3,7 +3,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from rl_donut.mapgen import AIR, MapConfig, PitConfig, box_rock_counts, generate_map, label_regions
+from rl_donut.mapgen import AIR, MapConfig, PitConfig, box_rock_counts, label_regions
 from rl_donut.mapgen.pits import Pit, lowest_air, pit_columns, pit_spans, place_pits
 from rl_donut.mapgen.platforms import reach_of
 
@@ -51,8 +51,7 @@ def test_pit_columns_include_the_margin():
 
 @pytest.mark.parametrize("count", [1, 2])
 def test_pits_cut_through_the_floor_of_a_room(count):
-    cfg = replace(CFG, pits=replace(CFG.pits, count=(count, count)))
-    result = place_pits(floor_room(), 0, cfg)
+    result = place_pits(floor_room(), count, 0, CFG)
     assert len(result.pits) == count and result.requested == count
     for p in result.pits:
         assert (result.grid[p.top:, p.x0: p.x0 + p.width] == AIR).all()
@@ -60,29 +59,27 @@ def test_pits_cut_through_the_floor_of_a_room(count):
 
 
 def test_shaft_deeper_than_max_depth_is_refused():
-    cfg = replace(CFG, pits=replace(CFG.pits, count=(2, 2), max_depth=2))
-    result = place_pits(floor_room(), 0, cfg)        # floor is 3 tiles thick
+    cfg = replace(CFG, pits=replace(CFG.pits, max_depth=2))
+    result = place_pits(floor_room(), 2, 0, cfg)     # floor is 3 tiles thick
     assert result.pits == () and result.requested == 2
     assert np.array_equal(result.grid, floor_room())
 
 
 def test_zero_pits_changes_nothing():
-    cfg = replace(CFG, pits=replace(CFG.pits, count=(0, 0)))
-    result = place_pits(floor_room(), 0, cfg)
+    result = place_pits(floor_room(), 0, 0, CFG)
     assert result.pits == () and result.requested == 0 and not result.carved.any()
 
 
 def test_falling_into_a_pit_is_not_a_trap():
-    cfg = replace(CFG, pits=replace(CFG.pits, count=(1, 1)))
-    reach = reach_of(place_pits(floor_room(), 0, cfg).grid, cfg)
+    reach = reach_of(place_pits(floor_room(), 1, 0, CFG).grid, CFG)
     assert reach.fully_reachable and reach.trap_free
 
 
 # --- generated maps ---
 
 @pytest.fixture(scope="module")
-def maps():
-    return [generate_map(s, CFG) for s in range(40)]
+def maps(generated_maps):
+    return generated_maps[:40]
 
 
 def test_pits_open_through_the_bottom_edge(maps):
@@ -95,6 +92,7 @@ def test_pits_open_through_the_bottom_edge(maps):
 def test_pits_are_symmetric_and_counted(maps):
     for m in maps:
         assert len(m.pits) in (0, m.pits_requested)
+        assert m.pits_requested == m.params.pit_count
         spans = {(p.x0, p.width) for p in m.pits}
         assert spans == {(CFG.width - x - w, w) for x, w in spans}
         assert np.array_equal(m.layers["pits"], m.layers["pits"][:, ::-1])
@@ -115,8 +113,10 @@ def test_no_platform_above_a_pit(maps):
             assert not cols[p.x0: p.x0 + p.width].any()
 
 
-def test_some_maps_get_pits(maps):
-    assert sum(bool(m.pits) for m in maps) >= 10
+def test_pits_usually_fit_when_requested(maps):
+    # First attempts only; validation retries the rest.
+    requesting = [m for m in maps if m.pits_requested]
+    assert sum(bool(m.pits) for m in requesting) >= len(requesting) // 3
 
 
 @pytest.mark.parametrize("kwargs", [{"tries": 0}, {"platform_margin": -1}])

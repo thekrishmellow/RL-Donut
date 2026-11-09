@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from rl_donut.mapgen import AIR, ROCK, MapConfig, RegionConfig, box_rock_counts, generate_map, label_regions
+from rl_donut.mapgen import AIR, ROCK, MapConfig, RegionConfig, box_rock_counts, label_regions
 from rl_donut.mapgen.regions import (
     cheapest_tunnel, connect_regions, covered_by_boxes, crossing_runs, crossings_ok, seam_column,
 )
@@ -95,8 +95,8 @@ def test_tunnel_digs_through_a_sealed_wall():
 # --- generated maps ---
 
 @pytest.fixture(scope="module")
-def maps():
-    return [generate_map(s, CFG) for s in range(60)]
+def maps(generated_maps):
+    return generated_maps
 
 
 def test_every_map_is_one_region(maps):

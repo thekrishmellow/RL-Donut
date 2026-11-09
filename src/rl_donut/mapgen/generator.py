@@ -39,6 +39,8 @@ class GeneratedMap:
     fully_reachable: bool
     trap_free: bool
     stranded_fraction: float
+    # Rejection reasons of earlier attempts for this seed (filled by generate_valid_map).
+    rejections: tuple[tuple[str, ...], ...] = ()
     # Boolean masks of what each stage changed, for previews and debugging.
     layers: dict[str, np.ndarray] = field(default_factory=dict, compare=False, repr=False)
 
@@ -61,7 +63,7 @@ def generate_map(seed: int, cfg: MapConfig | None = None, attempt: int = 0) -> G
     terrain = terrain_grid(seed, cfg, attempt)
     grid = add_border(terrain.grid, cfg.border)
     regions = connect_regions(grid, cfg.regions, cfg.border, mirror=cfg.terrain.mirror)
-    pits = place_pits(regions.grid, seed, cfg, attempt)
+    pits = place_pits(regions.grid, terrain.params.pit_count, seed, cfg, attempt)
     forbidden = pit_columns(pits.pits, cfg.width, cfg.pits.platform_margin)
     platforms = place_platforms(pits.grid, seed, cfg, attempt, forbidden)
     platform_mask = (platforms.grid != pits.grid) & ~platforms.unreachable_filled

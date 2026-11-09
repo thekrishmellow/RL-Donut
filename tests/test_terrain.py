@@ -59,9 +59,19 @@ def test_sampled_params_cover_configured_ranges():
     assert 0.0 <= biases.min() < 0.01 and 0.29 < biases.max() <= 0.3
 
 
-def test_params_are_reproducible_and_change_on_retry():
+def test_params_are_reproducible():
     assert sample_params(7, CFG) == sample_params(7, CFG)
-    assert sample_params(7, CFG) != sample_params(7, CFG, attempt=1)
+
+
+def test_params_stay_fixed_across_retries():
+    assert terrain_grid(7, CFG, attempt=0).params == terrain_grid(7, CFG, attempt=3).params
+    assert not np.array_equal(terrain_grid(7, CFG, attempt=0).grid, terrain_grid(7, CFG, attempt=3).grid)
+
+
+def test_pit_counts_cover_the_configured_range():
+    counts = np.array([sample_params(s, CFG).pit_count for s in range(300)])
+    assert set(counts) == {0, 1, 2}
+    assert all(abs(np.mean(counts == k) - 1 / 3) < 0.08 for k in (0, 1, 2))
 
 
 def test_height_bias_puts_more_rock_at_the_bottom():

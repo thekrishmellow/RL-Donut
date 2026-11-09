@@ -175,6 +175,8 @@ class MapConfig:
     # Air no reachable flight can occupy is filled with rock when it is at most this fraction
     # of the map's air; larger unreachable caverns are left for validation to reject.
     max_unreachable_fill: float = 0.03
+    # Attempts per seed before generate_valid_map gives up and raises.
+    max_attempts: int = 30
     noise: NoiseConfig = field(default_factory=NoiseConfig)
     terrain: TerrainConfig = field(default_factory=TerrainConfig)
     regions: RegionConfig = field(default_factory=RegionConfig)
@@ -191,5 +193,7 @@ class MapConfig:
             raise ValueError("max_stranded must be in [0, 1)")
         if not 0 <= self.max_unreachable_fill < 1:
             raise ValueError("max_unreachable_fill must be in [0, 1)")
+        if self.max_attempts < 1:
+            raise ValueError("max_attempts must be >= 1")
         if min(self.width, self.height) <= 2 * self.border + 2:
             raise ValueError("map is too small for its border")

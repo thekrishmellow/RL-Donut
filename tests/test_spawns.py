@@ -20,8 +20,8 @@ def test_mirror_is_its_own_inverse():
 
 
 @pytest.fixture(scope="module")
-def maps():
-    return [generate_map(s, CFG) for s in range(40)]
+def maps(generated_maps):
+    return generated_maps[:40]
 
 
 def test_teams_are_mirror_images(maps):

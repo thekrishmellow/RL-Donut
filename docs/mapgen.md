@@ -31,7 +31,8 @@ flowchart TD
     RG --> PT[7b. Pits<br/>pits.py]
     PT --> PL[7a. Reachability + platforms<br/>reach.py, platforms.py]
     PL --> SP[7c. Spawns<br/>spawns.py, geometry.py]
-    SP --> V[8. Validation + retry]
+    SP --> V[8. Validation + retry<br/>validation.py]
+    V -- rejected: attempt + 1 --> P
     V --> B[9. Batch generation, seed splits, cache]
 ```
 
@@ -46,8 +47,8 @@ flowchart TD
 | 7a. Reachability + platforms | done | `src/rl_donut/mapgen/reach.py`, `src/rl_donut/mapgen/platforms.py` |
 | 7b. Pits | done | `src/rl_donut/mapgen/pits.py` |
 | 7c. Spawns | done | `src/rl_donut/mapgen/spawns.py`, `src/rl_donut/mapgen/geometry.py` |
-| 8. Validation + retry | next | — |
-| 9. Batch generation | planned | — |
+| 8. Validation + retry | done | `src/rl_donut/mapgen/validation.py` |
+| 9. Batch generation | next | — |
 
 Steps are numbered in the order they were built. In the pipeline, pits (7b) run before
 platforms (7a), so ledges can repair anything a pit breaks and no platform covers a pit.
@@ -87,7 +88,7 @@ independent starting state. `PCG64` is the bit generator that produces the numbe
 |---|---|
 | One stream per component | If terrain code starts drawing one more number, platforms and spawns don't shift. Seed 42 stays seed 42. |
 | Fixed numeric stream ids, append-only | Renumbering would change every map. New components get new numbers at the end. |
-| `attempt` in the key | When a map fails validation we regenerate with `attempt + 1`. NumPy's docs warn against arithmetic seeds like `seed + k`. |
+| `attempt` in the key | When a map fails validation we regenerate with `attempt + 1`. NumPy's docs warn against arithmetic seeds like `seed + k`. The `PARAMS` stream always uses attempt 0, so a seed's design settings survive retries (step 8). |
 | Explicit `PCG64` | `default_rng()` is allowed to change its default algorithm in future NumPy versions. |
 | Exactly pinned NumPy | NumPy only guarantees identical streams on the same build. |
 
@@ -183,12 +184,14 @@ Why mirror the *noise* and not a finished half map: smoothing a half map treats 
 line as the map edge (rock), which grows a wall down the middle. Why left/right and not a 180°
 rotation: with height bias, a rotation would give one side the ground and the other the sky.
 
-**Per-map parameters.** `sample_params(seed, cfg)` draws two values from the `PARAMS` stream:
+**Per-map parameters.** `sample_params(seed, cfg)` draws a seed's design settings from the
+`PARAMS` stream. They depend only on the seed, never on the retry attempt (see step 8):
 
 | Parameter | Training range | Meaning |
 |---|---|---|
 | `rock_fraction` | 0.40–0.55 | Share of tiles that become rock. ~40% gives open arenas with floating islands; ~55% gives cave networks. |
 | `height_bias` | 0.0–0.3 | Pushes rock toward the bottom of the map: ground below, open sky above. |
+| `pit_count` | 0–2 | Pits the map must have (step 7b). |
 
 Out-of-distribution test maps will use rock fractions of 30–35% and 60–65%.
 
@@ -295,8 +298,8 @@ of the map; 2 tiles would cost about 12%.
 once its whole hitbox is beyond `kill_y`, so a fall into a pit is briefly visible before
 the death. Generator and engine read the same value.
 
-**Pits (configured here, carved in step 7).** `PitConfig` holds the pit settings and
-`Stream.PITS` their randomness:
+**Pits (configured here, carved in step 7b).** `PitConfig` holds the pit settings; the
+count is a per-seed parameter and `Stream.PITS` supplies the positions:
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -514,8 +517,8 @@ of a pit if you still have fuel.
 
 ### Where a pit can go
 
-- **Count** is drawn from the `PITS` stream: 0, 1 (centred on the seam) or 2 (a mirrored
-  pair, at least one clearance box apart). Training starts at `count=(0, 0)` and widens to
+- **Count** is the seed's `MapParams.pit_count`: 0, 1 (centred on the seam) or 2 (a
+  mirrored pair, at least one clearance box apart). Positions come from the `PITS` stream. Training starts at `count=(0, 0)` and widens to
   `(0, 2)` as a curriculum step.
 - **Width** is 3–6 tiles. A centred pit adjusts its width by one so it stays symmetric.
 - **Opening.** Every column of the pit must have its lowest air resting on floor that
@@ -553,9 +556,8 @@ make it harmless.
 | 2 (pair) | 66 | 54 (82%) |
 
 A centred pit needs main-group floor right at the bottom of the seam, which only about half
-of all maps have. Together with the reachability rule, about 30% of first attempts will be
-retried in step 8, averaging about 1.4 attempts (~0.3 s) per finished map. Generation takes
-about 210 ms per attempt. Most shafts are shallow (median 7 tiles), and all maps stay symmetric.
+of all maps have. Step 8 measures the real retry cost. Most shafts are shallow (median 7
+tiles), and all maps stay symmetric.
 
 ### What it records
 
@@ -614,8 +616,7 @@ lines clear that actually clip a rock corner; the exact walk catches them all.
 | **spacing 6, centre gap 16 (chosen)** | 92.0% |
 | spacing 6, centre gap 12 | 94.5% |
 
-Combining all retry reasons (pits, reachability, spawns), about 64% of first attempts are
-expected to pass, or about 1.55 attempts per finished map. Step 8 will measure this exactly.
+Step 8 measures the combined retry cost of all rules.
 
 ### What it records
 
@@ -631,6 +632,72 @@ The preview draws team A in cyan and team B in pink, and titles show placed/requ
   main floor, no spawn sees an enemy spawn, every distance rule holds, and at least 80% of
   maps get all 6. Plus a configurable count, impossible rules giving no spawns,
   reproducibility, config validation, and seed 42's spawns in the golden test.
+
+---
+
+## Step 8: Validation and retry (`validation.py`)
+
+Earlier steps try hard to make every map good, but some can't be fixed. This step decides
+which maps we keep, and retries the rest.
+
+### `validate(map, cfg)`
+
+Returns the list of reasons a map is rejected; an empty list means it's valid.
+
+| Reason | Rejected when |
+|---|---|
+| `trap` | Some floor reachable from the main area has no way back |
+| `stranded` | More than `max_stranded` (2%) of floor is unreachable |
+| `pits` | Fewer pits than the seed's `pit_count` |
+| `spawns` | Fewer than `spawns.per_team` (6) spawns per team |
+| `asymmetric` | The grid is not a left/right mirror image (safety re-check) |
+| `regions` | Not one region, or the centre-crossing rule fails (safety re-check) |
+| `border` | The frame is broken anywhere other than a pit (safety re-check) |
+
+The last three re-check guarantees earlier steps already make. They are cheap and catch
+bugs if those steps ever change.
+
+### `generate_valid_map(seed, cfg)`
+
+Tries attempts 0, 1, 2, … and returns the first map with no reasons. The map records which
+`attempt` passed and `rejections`: the reasons for every earlier attempt. After
+`max_attempts` (30) failures it raises `MapGenerationError`.
+
+### Why design settings stay fixed across retries
+
+Pass rates depend on the map's own settings. Over 400 seeds, first attempts passed 93% of
+the time with 0 pits, 34% with 1 pit and 65% with 2, and 75% at 40–45% rock against 54% at
+50–55%. If a retry re-drew everything, the kept maps would drift toward easy settings: the
+pit-count mix would become 49% / 18% / 34% instead of a third each, and low-rock maps would
+be over-represented. That would quietly break the pit curriculum and per-map-type results.
+
+So a seed's **design settings** (`MapParams`: rock fraction, height bias, pit count) always
+come from attempt 0, and retries re-draw only the **geometry** (terrain noise, pit
+positions, platforms, spawns).
+
+### Numbers (3,000 seeds)
+
+- No seed exhausted its attempts. Mean 1.97 attempts per map, median 1, 99th percentile 12,
+  worst 24.
+- Kept maps follow the intended settings: pit counts 32.6% / 34.5% / 32.9%, mean rock
+  fraction 0.473 (range midpoint 0.475).
+- Rejection reasons, counted over all failed attempts: `pits` 823, `spawns` 125,
+  `stranded` 89, `trap` 45.
+- The hardest combination (1 centred pit at 50–55% rock) passes 27% of attempts, so about
+  0.1 seeds per 12,000 would hit the 30-attempt cap. Step 9 decides what to do then.
+
+### What it records
+
+`GeneratedMap` gains `rejections`, and `MapParams` gains `pit_count`.
+`scripts/preview_maps.py` now shows validated maps (attempt number in each title); `--raw`
+shows first attempts instead.
+
+**Tests** (`tests/test_validation.py`): a valid map has no reasons; each reason is detected
+on a deliberately broken map; retries record why earlier attempts failed, and those reasons
+match re-validating each attempt; the kept map equals that plain attempt; design settings
+stay fixed across attempts; a first-attempt seed has no rejections; exhausting attempts
+raises; config validation; and a golden retry history for seed 0. `tests/test_terrain.py`
+checks that parameters stay fixed across retries and that pit counts cover 0–2 evenly.
 
 ---
 
@@ -668,3 +735,6 @@ The preview draws team A in cyan and team B in pink, and titles show placed/requ
 | Spawn point | Standing spot where an agent enters the match or respawns |
 | Line of sight | A straight segment between two points that touches no rock |
 | Grid walk (DDA) | Visiting every tile a segment passes through, in order |
+| Attempt | One try at generating a seed's map; retries use attempt 1, 2, … |
+| Design settings | A seed's rock fraction, height bias and pit count; fixed across attempts |
+| Rejection reason | Why validation refused an attempt (e.g. `pits`, `trap`) |

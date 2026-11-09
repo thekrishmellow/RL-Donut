@@ -14,9 +14,15 @@ ROCK = np.uint8(1)
 
 @dataclass(frozen=True)
 class MapParams:
-    """Concrete values drawn for one map from the ranges in MapConfig."""
+    """A seed's design settings, drawn from the ranges in MapConfig.
+
+    They depend only on the seed, never on the retry attempt: validation rejects some
+    settings more often than others, and re-drawing them on retry would skew the kept maps
+    toward the easy ones.
+    """
     rock_fraction: float
     height_bias: float
+    pit_count: int
 
 
 @dataclass(frozen=True)
@@ -30,11 +36,12 @@ class Terrain:
         return float(self.grid.mean())
 
 
-def sample_params(seed: int, cfg: MapConfig, attempt: int = 0) -> MapParams:
-    rng = make_rng(seed, Stream.PARAMS, attempt)
+def sample_params(seed: int, cfg: MapConfig) -> MapParams:
+    rng = make_rng(seed, Stream.PARAMS)
     return MapParams(
         rock_fraction=float(rng.uniform(*cfg.terrain.rock_fraction)),
         height_bias=float(rng.uniform(*cfg.terrain.height_bias)),
+        pit_count=int(rng.integers(cfg.pits.count[0], cfg.pits.count[1] + 1)),
     )
 
 
@@ -85,7 +92,7 @@ def smooth(grid: np.ndarray, passes: int, rock_min: int = 5, air_max: int = 3) -
 
 
 def terrain_grid(seed: int, cfg: MapConfig, attempt: int = 0) -> Terrain:
-    params = sample_params(seed, cfg, attempt)
+    params = sample_params(seed, cfg)
     grid = threshold(map_noise(seed, cfg, attempt), params.rock_fraction, params.height_bias)
     t = cfg.terrain
     grid = smooth(grid, t.smooth_passes, t.smooth_rock_min, t.smooth_air_max)

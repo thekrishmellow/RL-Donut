@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator), steps 1–7 of 9 done.
+**Status:** Phase 1 (procedural map generator), steps 1–8 of 9 done.
 
 ## Documentation
 
@@ -30,7 +30,7 @@ map generation depends on its random number streams, and the golden tests will f
 
 ```bash
 .venv/bin/python -m pytest -q                                  # run all tests
-.venv/bin/python scripts/preview_maps.py --start 0 --count 8   # render maps -> outputs/maps_preview.png
+.venv/bin/python scripts/preview_maps.py --start 0 --count 8   # render validated maps -> outputs/maps_preview.png (--raw: first attempts)
 .venv/bin/python scripts/preview_noise.py --seed 42            # noise settings sheet -> outputs/noise_preview.png
 ```
 
@@ -54,7 +54,8 @@ RL-Donut/
 │       ├── reach.py           Jetpack reachability between floors: traps, stranded floors, occupiable air
 │       ├── platforms.py       Floating ledges and cover, unreachable-air filling
 │       ├── spawns.py          Mirrored spawn points with no line of sight between teams
-│       └── geometry.py        Exact line of sight on the grid (shared with future hitscan)
+│       ├── geometry.py        Exact line of sight on the grid (shared with future hitscan)
+│       └── validation.py      Accept/reject finished maps; generate_valid_map retries rejected seeds
 ├── scripts/                   Preview tools (matplotlib; never imported by the generator)
 │   ├── preview_maps.py
 │   └── preview_noise.py

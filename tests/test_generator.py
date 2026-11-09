@@ -75,19 +75,20 @@ def test_map_config_rejects_invalid_border(kwargs):
         MapConfig(**kwargs)
 
 
-def test_golden_pits_seed_10():
-    game_map = generate_map(10)
-    assert game_map.pits_requested == 2
-    assert [(p.x0, p.width, p.top) for p in game_map.pits] == [(26, 4, 40), (66, 4, 40)]
-    assert int(game_map.grid.sum()) == 2326
+def test_golden_pits_seed_5():
+    game_map = generate_map(5)
+    assert game_map.pits_requested == game_map.params.pit_count == 2
+    assert [(p.x0, p.width, p.top) for p in game_map.pits] == [(33, 5, 46), (58, 5, 46)]
+    assert int(game_map.grid.sum()) == 1986
 
 
 def test_golden_generated_map_seed_42():
     game_map = generate_map(42)
-    assert int(game_map.grid.sum()) == 2700
+    assert int(game_map.grid.sum()) == 2696
     assert (game_map.tunnels, game_map.crossings, game_map.widest_crossing) == (1, 2, 8)
     assert [p.kind for p in game_map.platforms] == ["cover"] * 4
-    assert (game_map.pits_requested, game_map.pits) == (0, ())
+    assert game_map.pits_requested == 1
+    assert [(p.x0, p.width, p.top) for p in game_map.pits] == [(46, 4, 46)]
     assert [(s.y, s.x) for s in game_map.spawns.team_a] == [(21, 9), (30, 10), (8, 22), (18, 30), (33, 4), (14, 22)]
     assert game_map.fully_reachable and game_map.trap_free
-    assert hashlib.sha256(game_map.grid.tobytes()).hexdigest()[:16] == "8fe72e69aae02aba"
+    assert hashlib.sha256(game_map.grid.tobytes()).hexdigest()[:16] == "b848ccf0aa4dd212"

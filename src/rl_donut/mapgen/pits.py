@@ -74,10 +74,9 @@ def pit_spans(rng: np.random.Generator, n: int, width: int, cfg: MapConfig) -> l
     return [(x0, pw), (width - x0 - pw, pw)]
 
 
-def place_pits(grid: np.ndarray, seed: int, cfg: MapConfig, attempt: int = 0) -> PitResult:
+def place_pits(grid: np.ndarray, requested: int, seed: int, cfg: MapConfig, attempt: int = 0) -> PitResult:
+    """Cut `requested` pits (the seed's MapParams.pit_count); positions come from the PITS stream."""
     rng = make_rng(seed, Stream.PITS, attempt)
-    lo, hi = cfg.pits.count
-    requested = int(rng.integers(lo, hi + 1))
     nothing = np.zeros(grid.shape, dtype=bool)
     if requested == 0:
         return PitResult(grid, (), 0, nothing)

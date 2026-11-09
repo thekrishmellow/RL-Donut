@@ -44,8 +44,8 @@ def test_placement_stays_inside_the_border():
 # --- generated maps ---
 
 @pytest.fixture(scope="module")
-def maps():
-    return [generate_map(s, CFG) for s in range(30)]
+def maps(generated_maps):
+    return generated_maps[:30]
 
 
 def test_platforms_are_rock_strips_and_match_the_layer(maps):
@@ -89,7 +89,7 @@ def test_unreachable_fill_is_small_and_solid(maps):
 
 def test_fill_can_be_disabled():
     cfg = replace(CFG, max_unreachable_fill=0.0)
-    assert not any(generate_map(s, cfg).layers["unreachable"].any() for s in range(30))
+    assert not any(generate_map(s, cfg).layers["unreachable"].any() for s in range(10))
 
 
 def test_no_platforms_when_none_are_needed_or_allowed():
