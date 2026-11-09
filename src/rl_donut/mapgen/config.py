@@ -84,6 +84,9 @@ class RegionConfig:
     min_region: int = 60
     # Cost of digging one rock tile relative to moving one tile through air.
     rock_cost: float = 12.0
+    # Multiplier on digging vertically right after a vertical step. Straight dug shafts taller
+    # than the climb budget are one-way traps; this makes tunnels climb as staircases instead.
+    vertical_run_cost: float = 3.0
     # Required number of separate routes across the centre line, unless one opening is at
     # least wide_crossing rows tall (too wide for one agent to block).
     min_crossings: int = 2
@@ -100,8 +103,36 @@ class RegionConfig:
             raise ValueError("min_region must be >= 1")
         if self.rock_cost < 0:
             raise ValueError("rock_cost must be >= 0")
+        if self.vertical_run_cost < 1:
+            raise ValueError("vertical_run_cost must be >= 1")
         if self.min_crossings < 1 or self.crossing_gap < 0 or self.max_tunnels < 1 or self.wide_crossing < 1:
             raise ValueError("min_crossings, wide_crossing and max_tunnels must be >= 1, crossing_gap >= 0")
+
+
+@dataclass(frozen=True)
+class PlatformConfig:
+    width: tuple[int, int] = (4, 8)
+    # Air required above (standing room) and below (room to pass under) a platform.
+    clear_above: int = 3
+    clear_below: int = 3
+    # One cover placement per this many air tiles, up to max_cover placements (each mirrored).
+    cover_area: int = 800
+    max_cover: int = 4
+    # Safety caps: ledge rounds per map, position tries per platform, and reachability
+    # checks per ledge (each check costs ~30 ms).
+    max_needed: int = 12
+    tries: int = 60
+    max_evaluations: int = 8
+
+    def __post_init__(self):
+        lo, hi = self.width
+        if not 2 <= lo <= hi:
+            raise ValueError("platform width must satisfy 2 <= low <= high")
+        if self.clear_above < 1 or self.clear_below < 1:
+            raise ValueError("platform clearances must be >= 1")
+        if (self.cover_area < 1 or self.max_cover < 0 or self.max_needed < 0 or self.tries < 1
+                or self.max_evaluations < 1):
+            raise ValueError("invalid platform counts")
 
 
 @dataclass(frozen=True)
@@ -110,13 +141,30 @@ class MapConfig:
     height: int = 48
     # Solid rock frame on all four sides; pits later cut through the bottom edge.
     border: int = 1
+    # Contract with the physics engine: no required climb is taller than this many tiles,
+    # and the engine must be able to climb at least this far on one full tank.
+    climb_budget: int = 12
+    # A map is acceptable when it has no traps (every floor reachable from the main area can
+    # get back) and at most this fraction of floor is unreachable. Unreachable floor is never
+    # visited, and spawns are only placed on the main area.
+    max_stranded: float = 0.02
+    # Air no reachable flight can occupy is filled with rock when it is at most this fraction
+    # of the map's air; larger unreachable caverns are left for validation to reject.
+    max_unreachable_fill: float = 0.03
     noise: NoiseConfig = field(default_factory=NoiseConfig)
     terrain: TerrainConfig = field(default_factory=TerrainConfig)
     regions: RegionConfig = field(default_factory=RegionConfig)
+    platforms: PlatformConfig = field(default_factory=PlatformConfig)
     pits: PitConfig = field(default_factory=PitConfig)
 
     def __post_init__(self):
         if self.border < 1:
             raise ValueError("border must be >= 1")
+        if self.climb_budget < 1:
+            raise ValueError("climb_budget must be >= 1")
+        if not 0 <= self.max_stranded < 1:
+            raise ValueError("max_stranded must be in [0, 1)")
+        if not 0 <= self.max_unreachable_fill < 1:
+            raise ValueError("max_unreachable_fill must be in [0, 1)")
         if min(self.width, self.height) <= 2 * self.border + 2:
             raise ValueError("map is too small for its border")

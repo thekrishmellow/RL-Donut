@@ -75,6 +75,8 @@ def test_map_config_rejects_invalid_border(kwargs):
 
 def test_golden_generated_map_seed_42():
     game_map = generate_map(42)
-    assert int(game_map.grid.sum()) == 2854
+    assert int(game_map.grid.sum()) == 2700
     assert (game_map.tunnels, game_map.crossings, game_map.widest_crossing) == (1, 2, 8)
-    assert hashlib.sha256(game_map.grid.tobytes()).hexdigest()[:16] == "964a6a5062422501"
+    assert [p.kind for p in game_map.platforms] == ["cover"] * 4
+    assert game_map.fully_reachable and game_map.trap_free
+    assert hashlib.sha256(game_map.grid.tobytes()).hexdigest()[:16] == "8fe72e69aae02aba"

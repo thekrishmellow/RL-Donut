@@ -69,34 +69,45 @@ def label_regions(fits: np.ndarray) -> tuple[np.ndarray, list[int]]:
 
 
 def cheapest_tunnel(counts: np.ndarray, sources: np.ndarray, targets: np.ndarray,
-                    rock_cost: float, allowed: np.ndarray) -> list[tuple[int, int]] | None:
-    """Dijkstra over anchors: each step costs 1 plus rock_cost per rock tile in the box entered."""
-    dist = np.full(counts.shape, np.inf)
+                    rock_cost: float, allowed: np.ndarray,
+                    vertical_run_cost: float = 1.0) -> list[tuple[int, int]] | None:
+    """Dijkstra over anchors: each step costs 1 plus rock_cost per rock tile in the box entered.
+
+    Digging vertically right after another vertical step is multiplied by vertical_run_cost,
+    so dug routes climb as staircases (footholds every step) rather than straight shafts.
+    The search state is (anchor, whether the last step was vertical), so paths stay optimal.
+    """
+    height, width = counts.shape
+    dist = np.full((2, height, width), np.inf)
     prev = {}
     heap = []
     for y, x in zip(*np.nonzero(sources & allowed)):
-        dist[y, x] = 0.0
-        heap.append((0.0, int(y), int(x)))
+        dist[0, y, x] = 0.0
+        heap.append((0.0, int(y), int(x), 0))
     heapq.heapify(heap)
-    height, width = counts.shape
     while heap:
-        d, y, x = heapq.heappop(heap)
-        if d > dist[y, x]:
+        d, y, x, vertical = heapq.heappop(heap)
+        if d > dist[vertical, y, x]:
             continue
         if targets[y, x]:
+            state = (y, x, vertical)
             path = [(y, x)]
-            while (y, x) in prev:
-                y, x = prev[(y, x)]
-                path.append((y, x))
+            while state in prev:
+                state = prev[state]
+                path.append(state[:2])
             return path[::-1]
         for dy, dx in NEIGHBOURS:
             ny, nx = y + dy, x + dx
             if 0 <= ny < height and 0 <= nx < width and allowed[ny, nx]:
-                nd = d + 1.0 + rock_cost * counts[ny, nx]
-                if nd < dist[ny, nx]:
-                    dist[ny, nx] = nd
-                    prev[(ny, nx)] = (y, x)
-                    heapq.heappush(heap, (nd, ny, nx))
+                step = 1.0 + rock_cost * counts[ny, nx]
+                nv = int(dy != 0)
+                if nv and vertical and counts[ny, nx] > 0:
+                    step *= vertical_run_cost
+                nd = d + step
+                if nd < dist[nv, ny, nx]:
+                    dist[nv, ny, nx] = nd
+                    prev[(ny, nx, nv)] = (y, x, vertical)
+                    heapq.heappush(heap, (nd, ny, nx, nv))
     return None
 
 
@@ -148,7 +159,7 @@ def crossings_ok(crossings: int, widest_crossing: int, cfg: RegionConfig) -> boo
     return crossings >= cfg.min_crossings or widest_crossing >= cfg.wide_crossing
 
 
-def _analyse(grid: np.ndarray, cfg: RegionConfig):
+def analyse(grid: np.ndarray, cfg: RegionConfig):
     counts = box_rock_counts(grid, cfg.clearance_w, cfg.clearance_h)
     labels, sizes = label_regions(counts == 0)
     main = int(np.argmax(sizes)) if sizes else -1
@@ -166,18 +177,19 @@ def connect_regions(grid: np.ndarray, cfg: RegionConfig, border: int, mirror: bo
     allowed[border: height - border - h + 1, border: width - border - w + 1] = True
 
     tunnels = 0
-    counts, labels, sizes, main = _analyse(grid, cfg)
+    counts, labels, sizes, main = analyse(grid, cfg)
     while main >= 0 and tunnels < cfg.max_tunnels:
         others = [k for k, s in enumerate(sizes) if k != main and s >= cfg.min_region]
         if not others:
             break
         k = max(others, key=lambda r: sizes[r])
-        path = cheapest_tunnel(counts, labels == k, labels == main, cfg.rock_cost, allowed)
+        path = cheapest_tunnel(counts, labels == k, labels == main, cfg.rock_cost, allowed,
+                               cfg.vertical_run_cost)
         if path is None:
             break
         carve(grid, dug, path, w, h, mirror)
         tunnels += 1
-        counts, labels, sizes, main = _analyse(grid, cfg)
+        counts, labels, sizes, main = analyse(grid, cfg)
 
     column = seam_column(width, w)
     runs = crossing_runs(labels == main, column) if main >= 0 else []
@@ -192,12 +204,12 @@ def connect_regions(grid: np.ndarray, cfg: RegionConfig, border: int, mirror: bo
         main_mask = labels == main
         xs = np.arange(width)[None, :]
         path = cheapest_tunnel(counts, main_mask & (xs < column), main_mask & (xs > column),
-                               cfg.rock_cost, route_allowed)
+                               cfg.rock_cost, route_allowed, cfg.vertical_run_cost)
         if path is None:
             break
         carve(grid, dug, path, w, h, mirror)
         tunnels += 1
-        counts, labels, sizes, main = _analyse(grid, cfg)
+        counts, labels, sizes, main = analyse(grid, cfg)
         runs = crossing_runs(labels == main, column)
 
     filled = np.zeros(grid.shape, dtype=bool)

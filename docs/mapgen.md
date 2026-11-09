@@ -28,8 +28,10 @@ flowchart TD
     T --> C[4. Cellular-automata smoothing<br/>terrain.smooth]
     C --> M[5. Border + kill line<br/>generator.add_border]
     M --> RG[6. Regions + corridors<br/>regions.connect_regions]
-    RG --> PL[7. Platforms, pits, spawns]
-    PL --> V[8. Validation + retry]
+    RG --> PL[7a. Reachability + platforms<br/>reach.py, platforms.py]
+    PL --> PT[7b. Pits]
+    PT --> SP[7c. Spawns]
+    SP --> V[8. Validation + retry]
     V --> B[9. Batch generation, seed splits, cache]
 ```
 
@@ -41,7 +43,9 @@ flowchart TD
 | 4. Smoothing | done | `src/rl_donut/mapgen/terrain.py` |
 | 5. Border + kill line | done | `src/rl_donut/mapgen/generator.py` |
 | 6. Regions + corridors | done | `src/rl_donut/mapgen/regions.py` |
-| 7. Platforms, pits, spawns | next | — |
+| 7a. Reachability + platforms | done | `src/rl_donut/mapgen/reach.py`, `src/rl_donut/mapgen/platforms.py` |
+| 7b. Pits | next | — |
+| 7c. Spawns | planned | — |
 | 8. Validation + retry | planned | — |
 | 9. Batch generation | planned | — |
 
@@ -356,6 +360,13 @@ so far. Entering a position costs `1 + rock_cost × (rock tiles in its box)`, wi
 possible tunnel. Because rock is so much more expensive than air, the tunnel follows
 existing caves and digs only the gaps.
 
+**Staircases, not shafts.** Digging vertically right after another vertical step costs
+`vertical_run_cost` (3) times more. The cheapest route through rock then alternates up and
+sideways, which leaves a foothold on every step. Without this, tunnels were often straight
+2-wide shafts; a shaft taller than the climb budget (step 7a) is a one-way door, because you
+can fall down it but have nowhere to land and refuel on the way up. To keep the search exact,
+its state is (position, whether the last step was vertical).
+
 `carve` clears the box at every position on the path, and at its mirror image, so maps stay
 symmetric. Positions whose box would touch the border are not allowed, so the frame is
 never dug.
@@ -377,14 +388,118 @@ never dug.
 `layers["filled"]`: masks of the tiles this step changed. `scripts/preview_maps.py` draws
 dug tiles in blue and filled tiles in orange.
 
-Measured over 1,000 seeds: every map is one region with no dead air, all are symmetric, all
-meet the crossing rule, and the step takes about 9 ms per map.
+Measured over 1,000 seeds: every map is one region with no dead air, all are symmetric, and
+all meet the crossing rule. With staircase tunnels (300 seeds), the step takes about 13 ms
+per map and digs 39 tiles on average.
 
 **Tests** (`tests/test_regions.py`): box counts, 1-tile tunnels have no positions, separate
 rooms are separate regions, tunnels go through gaps rather than digging, sealed walls get
 dug, and on 60 generated maps: exactly one region, no dead air, symmetric, border intact,
 crossing rule met, recorded crossings match the grid, layers match grid changes. Plus seam
-column symmetry and config validation.
+column symmetry, config validation, and staircase tunnels: through solid rock, a plain search
+digs a 23-step straight shaft, while the staircase search never takes two vertical steps in a row.
+
+---
+
+## Step 7a: Jetpack reachability and platforms (`reach.py`, `platforms.py`)
+
+Step 6 guarantees an agent-sized box can *fit* everywhere. That isn't the same as being able
+to *get* everywhere: falling is free, but climbing burns jetpack fuel. This step measures
+where an agent can really go, then adds floating platforms where it can't.
+
+### The climb contract
+
+`MapConfig.climb_budget = 12` is a promise between the map generator and the physics engine.
+The generator never requires a climb taller than this, and Phase 2 must include a test
+showing the engine can climb at least this far on one full tank.
+
+### The flight model (`reach.py`)
+
+- A **standing spot** is a box position resting on rock. Touching standing spots on the same
+  row form a **floor segment**: an agent can walk along it for free.
+- Flying costs fuel: up 2 units, sideways 1, down 0. A full tank holds `2 × climb_budget` = 24.
+  Landing on any standing spot refuels and ends the flight.
+- `flight_costs` computes, for every segment at once (numpy, batched), the cheapest fuel cost
+  to every position. Each sweep applies free falling, then one costed move.
+- `reach[a, b]` is true when one flight from `a` can land on `b`. `transitive_closure` turns
+  that into "can get there eventually, maybe via other floors".
+- The **main group** is the largest set of floors that can all reach each other.
+
+From this, three measures:
+
+| Measure | Meaning |
+|---|---|
+| `fully_reachable` | Every floor is in the main group |
+| `trap_free` | Every floor you can get to from the main group, you can get back from |
+| `stranded_fraction` | Share of standing spots outside the main group |
+
+A **trap** (reachable but no way back) is always bad: an agent that falls in is stuck for
+the rest of the episode. An **unreachable** floor that isn't a trap is harmless, because
+nobody can ever be there; it only wastes space.
+
+The model is deliberately conservative: real flight can arc and use momentum. Phase 2
+checks it against real physics.
+
+### Platforms (`platforms.py`)
+
+Platforms are solid rock strips 1 tile thick and 4–8 tiles wide. They need 3 rows of clear
+air above (standing room) and below (room to pass under), plus a 2-tile margin on each
+side. They are mirrored across the centre line, or become one centred platform when a pair
+would overlap the seam (`placement`). Every placement must keep the map one region and keep
+the centre-crossing rule (`region_check`).
+
+`place_platforms` works in three passes:
+
+1. **Ledges.** While floors are stranded, pick the largest one and try ledges near the
+   midpoint between it and the nearest reachable floor (random width and small jitter, up to
+   60 tries and 8 reachability checks). Keep a ledge only if the reachable area grows;
+   otherwise give up on that floor.
+2. **Unreachable air** (`fill_unreachable`). `occupiable_tiles` finds every tile a box can
+   cover on some flight from the main group. The rest is filled with rock, but only when it
+   is at most `max_unreachable_fill` (3%) of the map's air and the region and crossing rules
+   still hold. Larger unreachable caverns are left as they are; step 8 rejects those maps.
+3. **Cover.** One placement per 800 air tiles (at most 4), at random positions. Cover must
+   never shrink the reachable area or increase the stranded share.
+
+### What was tried, and what the numbers say
+
+Over 200 seeds:
+
+| Version | Fully reachable | Acceptable |
+|---|---|---|
+| No platforms | 40% | — |
+| Ledges | 78% | — |
+| + staircase tunnels (step 6) | 94% | 94.5% |
+
+A map is **acceptable** when it is trap-free and at most `max_stranded` (2%) of its floor is
+unreachable. The remaining ~5% are mostly upper caverns joined to the rest only through
+necks taller than the climb budget. Step 8 will reject and retry them with the next
+`attempt` (about 0.2 s each).
+
+Two ideas didn't make it:
+- **Stepping-stone ledges** placed right under a shelf's edge. No gain: on the failing maps,
+  every candidate failed the space check, because there is no 8-row-tall air pocket there.
+- **Filling all unreachable air.** It would delete up to 41% of a map's air.
+
+Cost: about 190 ms per map in total, mostly reachability checks (~30 ms each).
+
+### What it records
+
+`GeneratedMap` gains `platforms` (row, x0, width, and kind: `"ledge"` or `"cover"`),
+`fully_reachable`, `trap_free` and `stranded_fraction`, plus `layers["platforms"]` and
+`layers["unreachable"]`. `scripts/preview_maps.py` draws platforms in green and filled
+unreachable air in purple, and titles flag any map with a trap.
+
+**Tests:**
+- `tests/test_reach.py`: standing spots and floor segments; a flat room is fully reachable; a
+  step of `climb_budget − 2` can be climbed and `climb_budget + 2` can't. An unreachable high
+  shelf is not a trap, while a low floor under a tall step is. Occupiable air in low and tall
+  rooms. Recorded values match recomputation on 30 maps, and at least 85% of maps are
+  acceptable.
+- `tests/test_platforms.py`: the placement rules (mirrored, centred near the seam, needs
+  clear air, stays inside the border). On 30 maps: platforms are rock and match the layer,
+  keep standing room, are symmetric, and keep one region; the fill is small and can be
+  disabled. Plus reproducibility and config validation.
 
 ---
 
@@ -411,3 +526,11 @@ column symmetry and config validation.
 | Dead air | Air tiles no agent box in the main region can cover |
 | Centre crossing | A separate route across the map's centre line |
 | Dijkstra's algorithm | Shortest-path search that always expands the cheapest point reached so far |
+| Staircase tunnel | Dug route that alternates up and sideways, leaving a foothold on every step |
+| Climb budget | Tallest climb the map may require; the engine must manage it on one tank |
+| Standing spot | Box position resting on rock, where an agent can land and refuel |
+| Floor segment | Touching standing spots on one row; walkable for free |
+| Main group | Largest set of floors that can all reach each other |
+| Trap | Floor you can get to but never leave |
+| Stranded | Floor outside the main group |
+| Ledge / cover | Platform added to restore reachability / platform added for cover |

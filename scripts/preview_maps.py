@@ -13,8 +13,8 @@ from matplotlib.patches import Patch
 from rl_donut.mapgen import MapConfig, generate_map
 
 # Tile classes drawn in the preview.
-AIR, ROCK, DUG, FILLED = 0, 1, 2, 3
-COLOURS = ["white", "black", "#1f77b4", "#ff7f0e"]
+AIR, ROCK, DUG, FILLED, PLATFORM, UNREACHABLE = 0, 1, 2, 3, 4, 5
+COLOURS = ["white", "black", "#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd"]
 
 
 def main():
@@ -38,13 +38,21 @@ def main():
         if not args.plain:
             image[game_map.layers["dug"]] = DUG
             image[game_map.layers["filled"]] = FILLED
-        ax.imshow(image, cmap=ListedColormap(COLOURS), vmin=0, vmax=3, interpolation="nearest")
-        ax.set_title(f"seed {seed}: rock {game_map.rock_fraction:.0%}, bias {game_map.params.height_bias:.2f}, "
-                     f"{game_map.tunnels} tunnels, {game_map.crossings} crossings", fontsize=9)
+            image[game_map.layers["platforms"]] = PLATFORM
+            image[game_map.layers["unreachable"]] = UNREACHABLE
+        ax.imshow(image, cmap=ListedColormap(COLOURS), vmin=0, vmax=len(COLOURS) - 1, interpolation="nearest")
+        if game_map.fully_reachable:
+            status = "reachable"
+        else:
+            status = f"{game_map.stranded_fraction:.0%} stranded" + ("" if game_map.trap_free else ", TRAP")
+        ax.set_title(f"seed {seed}: rock {game_map.rock_fraction:.0%}, {game_map.tunnels} tunnels, "
+                     f"{len(game_map.platforms)} platforms, {status}", fontsize=9)
     if not args.plain:
         fig.legend(handles=[Patch(color=COLOURS[DUG], label="tunnel dug"),
-                            Patch(color=COLOURS[FILLED], label="dead air filled")],
-                   loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.04))
+                            Patch(color=COLOURS[FILLED], label="dead air filled"),
+                            Patch(color=COLOURS[PLATFORM], label="platform"),
+                            Patch(color=COLOURS[UNREACHABLE], label="unreachable air filled")],
+                   loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.04))
     fig.suptitle("Generated maps (black = rock)", fontsize=13)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

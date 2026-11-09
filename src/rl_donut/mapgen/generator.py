@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from rl_donut.mapgen.config import MapConfig
+from rl_donut.mapgen.platforms import Platform, place_platforms
 from rl_donut.mapgen.regions import connect_regions
 from rl_donut.mapgen.seeding import GENERATOR_VERSION
 from rl_donut.mapgen.terrain import ROCK, MapParams, terrain_grid
@@ -26,6 +27,11 @@ class GeneratedMap:
     # Separate routes across the centre line, and the tallest of them in anchor rows.
     crossings: int
     widest_crossing: int
+    platforms: tuple[Platform, ...]
+    # Jetpack reachability between standing spots (see reach.py).
+    fully_reachable: bool
+    trap_free: bool
+    stranded_fraction: float
     # Boolean masks of what each stage changed, for previews and debugging.
     layers: dict[str, np.ndarray] = field(default_factory=dict, compare=False, repr=False)
 
@@ -48,16 +54,23 @@ def generate_map(seed: int, cfg: MapConfig | None = None, attempt: int = 0) -> G
     terrain = terrain_grid(seed, cfg, attempt)
     grid = add_border(terrain.grid, cfg.border)
     regions = connect_regions(grid, cfg.regions, cfg.border, mirror=cfg.terrain.mirror)
+    platforms = place_platforms(regions.grid, seed, cfg, attempt)
+    platform_mask = (platforms.grid != regions.grid) & ~platforms.unreachable_filled
     return GeneratedMap(
         seed=seed,
         attempt=attempt,
         generator_version=GENERATOR_VERSION,
-        grid=regions.grid,
+        grid=platforms.grid,
         params=terrain.params,
         terrain_rock_fraction=terrain.final_rock_fraction,
         kill_y=cfg.height + cfg.pits.kill_margin,
         tunnels=regions.tunnels,
-        crossings=regions.crossings,
-        widest_crossing=regions.widest_crossing,
-        layers={"dug": regions.dug, "filled": regions.filled},
+        crossings=platforms.crossings,
+        widest_crossing=platforms.widest_crossing,
+        platforms=platforms.platforms,
+        fully_reachable=platforms.reachability.fully_reachable,
+        trap_free=platforms.reachability.trap_free,
+        stranded_fraction=platforms.reachability.stranded_fraction,
+        layers={"dug": regions.dug, "filled": regions.filled, "platforms": platform_mask,
+                "unreachable": platforms.unreachable_filled},
     )

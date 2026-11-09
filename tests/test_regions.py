@@ -54,6 +54,35 @@ def test_cheapest_tunnel_prefers_air_over_digging():
     assert all(counts[y, x] == 0 for y, x in path)   # went through the gap, dug nothing
 
 
+def longest_vertical_run(path):
+    longest = run = 0
+    for (y0, x0), (y1, x1) in zip(path, path[1:]):
+        run = run + 1 if x0 == x1 else 0
+        longest = max(longest, run)
+    return longest
+
+
+def solid_rock_route(vertical_run_cost):
+    counts = np.full((30, 30), 6, dtype=np.int32)
+    sources = np.zeros(counts.shape, dtype=bool)
+    targets = np.zeros(counts.shape, dtype=bool)
+    sources[25, 15] = True
+    targets[2, 15] = True
+    return cheapest_tunnel(counts, sources, targets, 12.0, np.ones(counts.shape, dtype=bool),
+                           vertical_run_cost)
+
+
+def test_plain_tunnel_digs_a_straight_shaft():
+    path = solid_rock_route(1.0)
+    assert longest_vertical_run(path) == 23
+
+
+def test_staircase_tunnel_never_digs_two_vertical_steps_in_a_row():
+    path = solid_rock_route(RC.vertical_run_cost)
+    assert path[0] == (25, 15) and path[-1] == (2, 15)
+    assert longest_vertical_run(path) == 1
+
+
 def test_tunnel_digs_through_a_sealed_wall():
     grid = rock_frame(10, 20)
     grid[:, 9:11] = ROCK
@@ -109,7 +138,7 @@ def test_recorded_crossings_match_the_grid(maps):
 
 def test_layers_match_grid_changes(maps):
     for m in maps:
-        assert (m.grid[m.layers["dug"]] == AIR).all()
+        assert (m.grid[m.layers["dug"] & ~m.layers["unreachable"]] == AIR).all()
         assert (m.grid[m.layers["filled"]] == ROCK).all()
 
 
@@ -122,6 +151,7 @@ def test_seam_column_is_its_own_mirror():
 @pytest.mark.parametrize("kwargs", [
     {"clearance_w": 0}, {"min_region": 0}, {"rock_cost": -1.0},
     {"min_crossings": 0}, {"crossing_gap": -1}, {"max_tunnels": 0}, {"wide_crossing": 0},
+    {"vertical_run_cost": 0.5},
 ])
 def test_region_config_rejects_invalid_values(kwargs):
     with pytest.raises(ValueError):
