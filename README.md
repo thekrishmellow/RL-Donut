@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Next: Phase 2, the game engine.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): step 1 of 8 done.
 
 ## Documentation
 
@@ -13,6 +13,7 @@ self-play, and are evaluated on maps they have never seen.
 | [`docs/PLAN.md`](docs/PLAN.md) | The whole project: roadmap, architecture, technical design per phase, infrastructure, risks, open decisions |
 | [`DESIGN.md`](DESIGN.md) | Project phases and the decision log (every choice, with its reason) |
 | [`docs/mapgen.md`](docs/mapgen.md) | How the map generator works, step by step, with code and the reasoning behind it |
+| [`docs/engine.md`](docs/engine.md) | How the game engine works, step by step, and the promises it keeps to the map generator |
 
 ## Setup
 
@@ -34,6 +35,7 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/preview_maps.py --start 0 --count 8   # render validated maps -> outputs/maps_preview.png (--raw: first attempts)
 .venv/bin/python scripts/preview_noise.py --seed 42            # noise settings sheet -> outputs/noise_preview.png
 .venv/bin/python scripts/build_maps.py --split val --workers 8 # (re)build a split -> data/maps/ (resumable)
+.venv/bin/python scripts/preview_world.py --count 4            # engine worlds: agents and spawns -> outputs/world_preview.png
 ```
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
@@ -47,9 +49,13 @@ RL-Donut/
 ├── DESIGN.md                  Phases + decision log
 ├── docs/PLAN.md               Whole-project plan and technical design
 ├── docs/mapgen.md             Map generator guide
+├── docs/engine.md             Game engine guide
 ├── requirements.txt           Pinned dependencies
 ├── pyproject.toml             Package + pytest config
 ├── src/rl_donut/
+│   ├── env/                   Phase 2: game engine (many matches per batch)
+│   │   ├── config.py          EngineConfig: team size, tick rate, hitbox
+│   │   └── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   └── mapgen/                Phase 1: procedural maps
 │       ├── seeding.py         Master seed -> independent named random streams
 │       ├── generator.py       Pipeline entry point: generate_map(seed) -> GeneratedMap
@@ -69,11 +75,12 @@ RL-Donut/
 ├── scripts/                   Tools (matplotlib; never imported by the generator)
 │   ├── build_maps.py          Generate a whole split in parallel and write its stats report
 │   ├── preview_maps.py
+│   ├── preview_world.py
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
 ├── map_cache/                 Resumable build chunks (git-ignored)
 └── outputs/                   Generated images and logs (git-ignored)
 ```
 
-Later phases will add `src/rl_donut/env/` (game engine and PettingZoo environment),
+Later phases will add the PettingZoo wrapper to `src/rl_donut/env/`, plus
 `src/rl_donut/rl/` (PPO and self-play), `src/rl_donut/eval/` and `dashboard/`.

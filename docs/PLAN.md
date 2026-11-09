@@ -9,6 +9,7 @@ open. It is a living document; update it whenever a phase lands or a plan change
 | `docs/PLAN.md` (this file) | The whole project: goals, roadmap, architecture, infrastructure, open decisions |
 | [`DESIGN.md`](../DESIGN.md) | Decision log: every approved choice, numbered, with its reason |
 | [`docs/mapgen.md`](mapgen.md) | Deep dive into the map generator (Phase 1), step by step |
+| [`docs/engine.md`](engine.md) | Deep dive into the game engine (Phase 2), step by step |
 | [`README.md`](../README.md) | Setup, everyday commands, repository layout |
 
 Status markers used below: **approved** (in `DESIGN.md`, may be built), **draft** (a
@@ -61,7 +62,7 @@ tooling, `M` map generator; later phases add their own letters).
 |---|---|---|---|
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
-| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (step 1 next) |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (step 1 done, step 2 next) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
@@ -109,7 +110,7 @@ flowchart LR
 | Package | Phase | Responsibility | Status |
 |---|---|---|---|
 | `rl_donut.mapgen` | 1 | Seed -> validated map; splits and cache | built |
-| `rl_donut.env` | 2–4 | Engine (pure numpy, no rendering), PettingZoo wrapper, bots, renderer, replays | planned |
+| `rl_donut.env` | 2–4 | Engine (pure numpy, many matches per batch, no rendering), PettingZoo wrapper, bots, renderer, replays | in progress |
 | `rl_donut.rl` | 5–7 | PPO, opponent pool, Elo, style policies | planned |
 | `rl_donut.eval` | 8, 10 | Generalization tests, benchmark suite, statistics | planned |
 | `dashboard/` | 9 | Interactive app reading runs and replays | planned |

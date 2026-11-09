@@ -41,8 +41,8 @@ later phases, infrastructure, open decisions) is in [`docs/PLAN.md`](docs/PLAN.m
 
 Each step ends with a test or picture; its decisions are discussed when it starts.
 
-1. World and state model — next
-2. Tile collision
+1. World and state model — done
+2. Tile collision — next
 3. Movement, jetpack and fuel (climb and < 1 tile per tick contracts)
 4. Route check: a scripted bot flies generator routes on many seeds (M4b), before shooting,
    because a failure here changes the generator
@@ -110,6 +110,9 @@ Each step ends with a test or picture; its decisions are discussed when it start
 | M47 | Freeze policy | Any change to generator output bumps `GENERATOR_VERSION` and rebuilds every split; a drift test regenerates a few val and test seeds and compares hashes | Results across generator versions are not comparable, so changes must be loud |
 | M48 | Exhausted seeds | A seed that fails all attempts is skipped and listed in the manifest | Keeps seed ranges fixed; no hand-picked replacements. In practice 3 of 10,000 train seeds (all centred pit + rock ≥ 0.53 + height bias ≥ 0.25), 0 in val and test |
 | M49 | OOD splits | Deferred to Phase 8 | Which shifts are worth testing depends on what the agents learn |
+| P1 | Engine state layout | numpy arrays of shape (matches, agents) covering many matches at once; `World.single` and `World.agent` for tests and debugging | Measured: ~470,000 ticks/s for 64 matches together vs ~48,000 for Python objects and ~12,000 for single-match arrays (numpy's ~1 µs per call dominates small arrays); this laptop is usually loaded, so multiple processes scale poorly; switching later means a rewrite. numba kept as a fallback (new dependency, version-sensitive) |
+| P2 | Coordinates | Continuous tile units, y downward, position = hitbox centre, float64 | Tile lookup is `grid[floor(y), floor(x)]`; mirroring is `width - x`; aim starts at the centre; float64 keeps replays exact |
+| P3 | Start positions | Agent `i` of each team starts on spawn `i` of its team; team A slots first | Spawns are mirrored, so every match starts as an exact mirror image; respawn selection is decided in step 2.6 |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits
