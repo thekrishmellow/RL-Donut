@@ -30,7 +30,7 @@ flowchart TD
     M --> RG[6. Regions + corridors<br/>regions.connect_regions]
     RG --> PT[7b. Pits<br/>pits.py]
     PT --> PL[7a. Reachability + platforms<br/>reach.py, platforms.py]
-    PL --> SP[7c. Spawns]
+    PL --> SP[7c. Spawns<br/>spawns.py, geometry.py]
     SP --> V[8. Validation + retry]
     V --> B[9. Batch generation, seed splits, cache]
 ```
@@ -45,12 +45,12 @@ flowchart TD
 | 6. Regions + corridors | done | `src/rl_donut/mapgen/regions.py` |
 | 7a. Reachability + platforms | done | `src/rl_donut/mapgen/reach.py`, `src/rl_donut/mapgen/platforms.py` |
 | 7b. Pits | done | `src/rl_donut/mapgen/pits.py` |
-| 7c. Spawns | next | — |
+| 7c. Spawns | done | `src/rl_donut/mapgen/spawns.py`, `src/rl_donut/mapgen/geometry.py` |
+| 8. Validation + retry | next | — |
+| 9. Batch generation | planned | — |
 
 Steps are numbered in the order they were built. In the pipeline, pits (7b) run before
 platforms (7a), so ledges can repair anything a pit breaks and no platform covers a pit.
-| 8. Validation + retry | planned | — |
-| 9. Batch generation | planned | — |
 
 All settings live in `src/rl_donut/mapgen/config.py`. Settings are frozen dataclasses that
 reject impossible values when they are created.
@@ -572,6 +572,68 @@ and fully counted, keep one region and no traps, have no platform above them, an
 
 ---
 
+## Step 7c: Spawn points (`spawns.py`, `geometry.py`)
+
+Spawn points are where agents enter the match and respawn. Bad spawns ruin training: an
+agent that can be shot the moment it appears learns nothing useful.
+
+### The rules
+
+- **On main floor.** A spawn is a standing spot in the main reachable group, so it is never
+  in a trap or an unreachable cavern.
+- **Mirrored teams.** Team A spawns on the left half; team B gets the exact mirror images.
+  The map is mirrored too, so both teams get identical geometry.
+- **No line of sight to any enemy spawn**, checked in both directions between box centres.
+- **Distances:** at least `pit_gap` (6) tiles from a pit, at least `centre_gap` (16) tiles
+  between a spawn's box and the centre line (so opposing spawns are ≥ 34 tiles apart), and at
+  least `spacing` (6) tiles between two spawns of the same team.
+- **Count:** `per_team` (6) per team. That covers 1v1 and 2v2 and leaves spares, so the
+  engine can respawn an agent where no living enemy can see it. Maps that can't fit them all
+  are rejected by step 8.
+
+Spawns are picked in random order from the `SPAWNS` stream, keeping each spot that passes
+every rule. Random (rather than always spreading spawns as far apart as possible) keeps
+layouts varied, so agents can't memorise a spawn pattern.
+
+### Line of sight (`geometry.py`)
+
+`line_of_sight` walks the grid exactly (the Amanatides–Woo method): it visits every tile
+the segment passes through, in order, and stops at the first rock tile. When the segment
+passes exactly through a tile corner, both tiles beside the corner are checked, so it can't
+slip between two diagonal rocks. Platforms are rock, so they block sight. Phase 2's hitscan
+weapons will use the same function, so "can't see" and "can't be shot" always agree.
+
+Over 10,000 random lines on generated maps, sampling a point every quarter tile called 46
+lines clear that actually clip a rock corner; the exact walk catches them all.
+
+### Numbers (200 seeds)
+
+| Rules | 6 spawns per team fit |
+|---|---|
+| spacing 8, centre gap 16 | 82.5% |
+| **spacing 6, centre gap 16 (chosen)** | 92.0% |
+| spacing 6, centre gap 12 | 94.5% |
+
+Combining all retry reasons (pits, reachability, spawns), about 64% of first attempts are
+expected to pass, or about 1.55 attempts per finished map. Step 8 will measure this exactly.
+
+### What it records
+
+`GeneratedMap.spawns` holds `team_a` and `team_b`: tuples of `Spawn(y, x)` box anchors.
+The preview draws team A in cyan and team B in pink, and titles show placed/required spawns.
+
+**Tests:**
+- `tests/test_geometry.py`: open space is clear; walls and tiles on the path block; tiles
+  beside the path don't; no slipping between diagonal rocks; a corner clip that
+  quarter-tile sampling misses; starts or ends in rock and lines leaving the map are blocked;
+  and whenever very dense sampling finds rock, the exact walk does too.
+- `tests/test_spawns.py`: mirroring; on 40 maps, teams are mirror images, spawns stand on
+  main floor, no spawn sees an enemy spawn, every distance rule holds, and at least 80% of
+  maps get all 6. Plus a configurable count, impossible rules giving no spawns,
+  reproducibility, config validation, and seed 42's spawns in the golden test.
+
+---
+
 ## Glossary
 
 | Term | Meaning |
@@ -603,3 +665,6 @@ and fully counted, keep one region and no traps, have no platform above them, an
 | Trap | Floor you can get to but never leave |
 | Stranded | Floor outside the main group |
 | Ledge / cover | Platform added to restore reachability / platform added for cover |
+| Spawn point | Standing spot where an agent enters the match or respawns |
+| Line of sight | A straight segment between two points that touches no rock |
+| Grid walk (DDA) | Visiting every tile a segment passes through, in order |

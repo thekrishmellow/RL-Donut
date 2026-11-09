@@ -9,6 +9,7 @@ from rl_donut.mapgen.pits import Pit, pit_columns, place_pits
 from rl_donut.mapgen.platforms import Platform, place_platforms
 from rl_donut.mapgen.regions import connect_regions
 from rl_donut.mapgen.seeding import GENERATOR_VERSION
+from rl_donut.mapgen.spawns import Spawns, place_spawns
 from rl_donut.mapgen.terrain import ROCK, MapParams, terrain_grid
 
 
@@ -32,6 +33,8 @@ class GeneratedMap:
     pits: tuple[Pit, ...]
     pits_requested: int
     platforms: tuple[Platform, ...]
+    # Mirrored spawn points; validation rejects maps with fewer than spawns.per_team each.
+    spawns: Spawns
     # Jetpack reachability between standing spots (see reach.py).
     fully_reachable: bool
     trap_free: bool
@@ -62,6 +65,7 @@ def generate_map(seed: int, cfg: MapConfig | None = None, attempt: int = 0) -> G
     forbidden = pit_columns(pits.pits, cfg.width, cfg.pits.platform_margin)
     platforms = place_platforms(pits.grid, seed, cfg, attempt, forbidden)
     platform_mask = (platforms.grid != pits.grid) & ~platforms.unreachable_filled
+    spawns = place_spawns(platforms.grid, platforms.reachability, pits.pits, seed, cfg, attempt)
     return GeneratedMap(
         seed=seed,
         attempt=attempt,
@@ -76,6 +80,7 @@ def generate_map(seed: int, cfg: MapConfig | None = None, attempt: int = 0) -> G
         pits=pits.pits,
         pits_requested=pits.requested,
         platforms=platforms.platforms,
+        spawns=spawns,
         fully_reachable=platforms.reachability.fully_reachable,
         trap_free=platforms.reachability.trap_free,
         stranded_fraction=platforms.reachability.stranded_fraction,

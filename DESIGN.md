@@ -30,7 +30,7 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 7. Placement, split in three:
    - 7a. Jetpack reachability + floating platforms — done
    - 7b. Bottom pits — done (runs before 7a in the pipeline)
-   - 7c. Spawn points
+   - 7c. Spawn points — done
 8. Validation (reachability acceptance, fairness, line of sight) + retry
 9. Batch generation, seed splits, cache, stats report
 
@@ -80,6 +80,10 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M34 | Pit opening | Every pit column must open through floor in the main reachable group; the pit must keep one region and the crossing rule, strand no extra floor, and stay trap-free | Pits belong on walked paths; a pit under an unvisited cavern teaches nothing |
 | M35 | No lids | Platforms may not use columns within 2 tiles of a pit | A ledge over a pit would make it harmless |
 | M36 | Pit shortfall | If the requested count doesn't fit, step 8 rejects the map and retries with the next attempt (replaces "fewer pits" in M17) | Otherwise "1 pit" would quietly become "0 pits" on ~60% of maps and the curriculum would get fewer pits than it asks for. Costs ~1.4 attempts per finished map |
+| M37 | Spawn layout | 6 spawns per team on main-group floor; team B mirrors team A; maps that can't fit 6 are retried | Mirroring makes spawns fair by construction; 6 covers 1v1 and 2v2 with spares for safe respawns |
+| M38 | Spawn rules | No line of sight to any enemy spawn (either direction); ≥ 6 tiles from pits; ≥ 16 tiles from the centre line; ≥ 6 tiles between same-team spawns | Prevents spawn kills and spawning into hazards. Spacing 8 fit only 82.5% of maps; 6 (three agent widths) fits 92% |
+| M39 | Spawn selection | Random order from the `SPAWNS` stream, keeping spots that pass every rule | Farthest-point picking repeats the same pattern on every map, which agents could memorise |
+| M40 | Line of sight | Exact grid walk (Amanatides–Woo), corners check both side tiles; shared in `geometry.py` and to be reused by Phase 2 hitscan | Quarter-tile sampling missed 46 of 10,000 corner clips; one function means "can't see" and "can't be shot" always agree |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits (planned)

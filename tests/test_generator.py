@@ -88,5 +88,6 @@ def test_golden_generated_map_seed_42():
     assert (game_map.tunnels, game_map.crossings, game_map.widest_crossing) == (1, 2, 8)
     assert [p.kind for p in game_map.platforms] == ["cover"] * 4
     assert (game_map.pits_requested, game_map.pits) == (0, ())
+    assert [(s.y, s.x) for s in game_map.spawns.team_a] == [(21, 9), (30, 10), (8, 22), (18, 30), (33, 4), (14, 22)]
     assert game_map.fully_reachable and game_map.trap_free
     assert hashlib.sha256(game_map.grid.tobytes()).hexdigest()[:16] == "8fe72e69aae02aba"

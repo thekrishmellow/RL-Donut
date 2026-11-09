@@ -142,6 +142,24 @@ class PlatformConfig:
 
 
 @dataclass(frozen=True)
+class SpawnConfig:
+    # Spawn points per team; team B's are the mirror images of team A's.
+    per_team: int = 6
+    # Minimum distance between two spawns of the same team, in tiles (between anchors).
+    spacing: float = 6.0
+    # Spawns may not use columns within this many tiles of a pit.
+    pit_gap: int = 6
+    # Minimum gap between a spawn's box and the centre line, in tiles.
+    centre_gap: int = 16
+
+    def __post_init__(self):
+        if self.per_team < 1:
+            raise ValueError("per_team must be >= 1")
+        if self.spacing < 0 or self.pit_gap < 0 or self.centre_gap < 0:
+            raise ValueError("spacing, pit_gap and centre_gap must be >= 0")
+
+
+@dataclass(frozen=True)
 class MapConfig:
     width: int = 96
     height: int = 48
@@ -162,6 +180,7 @@ class MapConfig:
     regions: RegionConfig = field(default_factory=RegionConfig)
     platforms: PlatformConfig = field(default_factory=PlatformConfig)
     pits: PitConfig = field(default_factory=PitConfig)
+    spawns: SpawnConfig = field(default_factory=SpawnConfig)
 
     def __post_init__(self):
         if self.border < 1:
