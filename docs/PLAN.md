@@ -61,7 +61,7 @@ tooling, `M` map generator; later phases add their own letters).
 |---|---|---|---|
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
-| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **next** |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (step 1 next) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
@@ -149,7 +149,12 @@ smoothed, bordered; regions joined with staircase tunnels; pits, platforms, spaw
 validation with retry; 10,000 train, 1,000 val and 1,000 test maps cached in `data/maps/`.
 Full details in [`docs/mapgen.md`](mapgen.md); decisions M1–M49.
 
-### Phase 2 — Game engine (draft)
+### Phase 2 — Game engine (steps approved, numbers draft)
+
+Steps (approved; listed in `DESIGN.md`): 1 world and state model, 2 tile collision,
+3 movement, jetpack and fuel, 4 route check, 5 aiming and hitscan rifle, 6 health, death
+and respawn, 7 match loop, 8 debug viewer and speed check. The route check comes before
+shooting because a failure there would change the generator and force a rebuild of every map.
 
 | Area | Draft |
 |---|---|

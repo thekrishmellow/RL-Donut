@@ -37,6 +37,20 @@ later phases, infrastructure, open decisions) is in [`docs/PLAN.md`](docs/PLAN.m
 8. Validation + retry — done
 9. Batch generation, seed splits, cache, stats report — done
 
+### Phase 2 steps
+
+Each step ends with a test or picture; its decisions are discussed when it starts.
+
+1. World and state model — next
+2. Tile collision
+3. Movement, jetpack and fuel (climb and < 1 tile per tick contracts)
+4. Route check: a scripted bot flies generator routes on many seeds (M4b), before shooting,
+   because a failure here changes the generator
+5. Aiming and hitscan rifle (uses `geometry.line_of_sight`, M40)
+6. Health, death and respawn
+7. Match loop: tick order, timer, scoring, action repeat, event log; determinism test
+8. Debug viewer (script only) and engine speed check
+
 ## Decisions
 
 | # | Decision | Choice | Why |
