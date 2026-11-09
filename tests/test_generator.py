@@ -12,10 +12,12 @@ CFG = MapConfig()
 @pytest.mark.parametrize("thickness", [1, 2])
 def test_border_is_solid_on_all_four_sides(thickness):
     cfg = replace(CFG, border=thickness)
-    grid = generate_map(5, cfg).grid
+    game_map = generate_map(5, cfg)
+    grid, pits = game_map.grid, game_map.layers["pits"]
     t = thickness
-    for edge in (grid[:t, :], grid[-t:, :], grid[:, :t], grid[:, -t:]):
+    for edge in (grid[:t, :], grid[:, :t], grid[:, -t:]):
         assert (edge == ROCK).all()
+    assert (grid[-t:, :][~pits[-t:, :]] == ROCK).all()       # only pits cut the bottom edge
 
 
 def test_border_leaves_interior_untouched():
@@ -73,10 +75,18 @@ def test_map_config_rejects_invalid_border(kwargs):
         MapConfig(**kwargs)
 
 
+def test_golden_pits_seed_10():
+    game_map = generate_map(10)
+    assert game_map.pits_requested == 2
+    assert [(p.x0, p.width, p.top) for p in game_map.pits] == [(26, 4, 40), (66, 4, 40)]
+    assert int(game_map.grid.sum()) == 2326
+
+
 def test_golden_generated_map_seed_42():
     game_map = generate_map(42)
     assert int(game_map.grid.sum()) == 2700
     assert (game_map.tunnels, game_map.crossings, game_map.widest_crossing) == (1, 2, 8)
     assert [p.kind for p in game_map.platforms] == ["cover"] * 4
+    assert (game_map.pits_requested, game_map.pits) == (0, ())
     assert game_map.fully_reachable and game_map.trap_free
     assert hashlib.sha256(game_map.grid.tobytes()).hexdigest()[:16] == "8fe72e69aae02aba"

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from rl_donut.mapgen.config import MapConfig
+from rl_donut.mapgen.pits import Pit, pit_columns, place_pits
 from rl_donut.mapgen.platforms import Platform, place_platforms
 from rl_donut.mapgen.regions import connect_regions
 from rl_donut.mapgen.seeding import GENERATOR_VERSION
@@ -27,6 +28,9 @@ class GeneratedMap:
     # Separate routes across the centre line, and the tallest of them in anchor rows.
     crossings: int
     widest_crossing: int
+    # Pits actually cut, and how many this seed asked for; validation rejects a shortfall.
+    pits: tuple[Pit, ...]
+    pits_requested: int
     platforms: tuple[Platform, ...]
     # Jetpack reachability between standing spots (see reach.py).
     fully_reachable: bool
@@ -54,8 +58,10 @@ def generate_map(seed: int, cfg: MapConfig | None = None, attempt: int = 0) -> G
     terrain = terrain_grid(seed, cfg, attempt)
     grid = add_border(terrain.grid, cfg.border)
     regions = connect_regions(grid, cfg.regions, cfg.border, mirror=cfg.terrain.mirror)
-    platforms = place_platforms(regions.grid, seed, cfg, attempt)
-    platform_mask = (platforms.grid != regions.grid) & ~platforms.unreachable_filled
+    pits = place_pits(regions.grid, seed, cfg, attempt)
+    forbidden = pit_columns(pits.pits, cfg.width, cfg.pits.platform_margin)
+    platforms = place_platforms(pits.grid, seed, cfg, attempt, forbidden)
+    platform_mask = (platforms.grid != pits.grid) & ~platforms.unreachable_filled
     return GeneratedMap(
         seed=seed,
         attempt=attempt,
@@ -67,10 +73,12 @@ def generate_map(seed: int, cfg: MapConfig | None = None, attempt: int = 0) -> G
         tunnels=regions.tunnels,
         crossings=platforms.crossings,
         widest_crossing=platforms.widest_crossing,
+        pits=pits.pits,
+        pits_requested=pits.requested,
         platforms=platforms.platforms,
         fully_reachable=platforms.reachability.fully_reachable,
         trap_free=platforms.reachability.trap_free,
         stranded_fraction=platforms.reachability.stranded_fraction,
-        layers={"dug": regions.dug, "filled": regions.filled, "platforms": platform_mask,
-                "unreachable": platforms.unreachable_filled},
+        layers={"dug": regions.dug, "filled": regions.filled, "pits": pits.carved,
+                "platforms": platform_mask, "unreachable": platforms.unreachable_filled},
     )

@@ -61,6 +61,10 @@ class PitConfig:
     max_depth: int = 10
     # An agent dies once its whole hitbox is more than this many tiles below the bottom edge.
     kill_margin: float = 3.0
+    # Random positions tried before giving up (validation then retries the whole map).
+    tries: int = 40
+    # Platforms may not use columns within this many tiles of a pit, so none can cover it.
+    platform_margin: int = 2
 
     def __post_init__(self):
         lo, hi = self.count
@@ -73,6 +77,8 @@ class PitConfig:
             raise ValueError("max_depth must be >= 1")
         if self.kill_margin < 0:
             raise ValueError("kill_margin must be >= 0")
+        if self.tries < 1 or self.platform_margin < 0:
+            raise ValueError("tries must be >= 1 and platform_margin >= 0")
 
 
 @dataclass(frozen=True)

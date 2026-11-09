@@ -119,8 +119,10 @@ def test_maps_stay_symmetric(maps):
 
 def test_border_is_never_dug(maps):
     for m in maps:
+        dug = m.layers["dug"]
+        assert not (dug[0].any() or dug[-1].any() or dug[:, 0].any() or dug[:, -1].any())
         g = m.grid
-        assert (g[0] == ROCK).all() and (g[-1] == ROCK).all()
+        assert (g[0] == ROCK).all() and (g[-1][~m.layers["pits"][-1]] == ROCK).all()
         assert (g[:, 0] == ROCK).all() and (g[:, -1] == ROCK).all()
 
 
@@ -139,7 +141,7 @@ def test_recorded_crossings_match_the_grid(maps):
 def test_layers_match_grid_changes(maps):
     for m in maps:
         assert (m.grid[m.layers["dug"] & ~m.layers["unreachable"]] == AIR).all()
-        assert (m.grid[m.layers["filled"]] == ROCK).all()
+        assert (m.grid[m.layers["filled"] & ~m.layers["pits"]] == ROCK).all()
 
 
 def test_seam_column_is_its_own_mirror():

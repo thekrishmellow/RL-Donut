@@ -36,10 +36,12 @@ class PlatformResult:
     widest_crossing: int
 
 
-def placement(grid: np.ndarray, row: int, x0: int, pw: int, cfg: MapConfig) -> list[tuple[int, int, int]] | None:
+def placement(grid: np.ndarray, row: int, x0: int, pw: int, cfg: MapConfig,
+              forbidden: np.ndarray | None = None) -> list[tuple[int, int, int]] | None:
     """Platform strips (row, x0, width) for a mirrored placement, or None if it doesn't fit.
 
     A placement too close to the centre line becomes one centred platform instead of a pair.
+    Strips may not touch `forbidden` columns (those above pits).
     """
     height, width = grid.shape
     margin = cfg.regions.clearance_w
@@ -59,6 +61,8 @@ def placement(grid: np.ndarray, row: int, x0: int, pw: int, cfg: MapConfig) -> l
         if left < cfg.border or right > width - 1 - cfg.border:
             return None
         if (grid[top: bottom + 1, left: right + 1] != AIR).any():
+            return None
+        if forbidden is not None and forbidden[x: x + sw].any():
             return None
     return strips
 
@@ -114,7 +118,9 @@ def fill_unreachable(grid: np.ndarray, reach: Reachability, crossings: int, wide
     return trial, reach_of(trial, cfg), c, wd, filled
 
 
-def place_platforms(grid: np.ndarray, seed: int, cfg: MapConfig, attempt: int = 0) -> PlatformResult:
+def place_platforms(grid: np.ndarray, seed: int, cfg: MapConfig, attempt: int = 0,
+                    forbidden: np.ndarray | None = None) -> PlatformResult:
+    """`forbidden` marks columns no platform may use (above pits)."""
     rng = make_rng(seed, Stream.PLATFORMS, attempt)
     pc = cfg.platforms
     h = cfg.regions.clearance_h
@@ -141,7 +147,7 @@ def place_platforms(grid: np.ndarray, seed: int, cfg: MapConfig, attempt: int = 
         for _ in range(pc.tries):
             pw = int(rng.integers(pc.width[0], pc.width[1] + 1))
             strips = placement(grid, row + int(rng.integers(-2, 3)),
-                               col - pw // 2 + int(rng.integers(-3, 4)), pw, cfg)
+                               col - pw // 2 + int(rng.integers(-3, 4)), pw, cfg, forbidden)
             if not strips:
                 continue
             trial = with_strips(grid, strips)
@@ -170,7 +176,7 @@ def place_platforms(grid: np.ndarray, seed: int, cfg: MapConfig, attempt: int = 
             pw = int(rng.integers(pc.width[0], pc.width[1] + 1))
             row = int(rng.integers(cfg.border + pc.clear_above, height - cfg.border - pc.clear_below))
             x0 = int(rng.integers(cfg.border, width // 2))
-            strips = placement(grid, row, x0, pw, cfg)
+            strips = placement(grid, row, x0, pw, cfg, forbidden)
             if not strips:
                 continue
             trial = with_strips(grid, strips)

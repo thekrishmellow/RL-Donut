@@ -13,8 +13,8 @@ from matplotlib.patches import Patch
 from rl_donut.mapgen import MapConfig, generate_map
 
 # Tile classes drawn in the preview.
-AIR, ROCK, DUG, FILLED, PLATFORM, UNREACHABLE = 0, 1, 2, 3, 4, 5
-COLOURS = ["white", "black", "#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd"]
+AIR, ROCK, DUG, FILLED, PLATFORM, UNREACHABLE, PIT = 0, 1, 2, 3, 4, 5, 6
+COLOURS = ["white", "black", "#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#d62728"]
 
 
 def main():
@@ -40,19 +40,22 @@ def main():
             image[game_map.layers["filled"]] = FILLED
             image[game_map.layers["platforms"]] = PLATFORM
             image[game_map.layers["unreachable"]] = UNREACHABLE
+            image[game_map.layers["pits"]] = PIT
         ax.imshow(image, cmap=ListedColormap(COLOURS), vmin=0, vmax=len(COLOURS) - 1, interpolation="nearest")
         if game_map.fully_reachable:
             status = "reachable"
         else:
             status = f"{game_map.stranded_fraction:.0%} stranded" + ("" if game_map.trap_free else ", TRAP")
-        ax.set_title(f"seed {seed}: rock {game_map.rock_fraction:.0%}, {game_map.tunnels} tunnels, "
-                     f"{len(game_map.platforms)} platforms, {status}", fontsize=9)
+        pits = f"{len(game_map.pits)}/{game_map.pits_requested} pits"
+        ax.set_title(f"seed {seed}: rock {game_map.rock_fraction:.0%}, {game_map.tunnels} tunnels, {pits}, "
+                     f"{len(game_map.platforms)} platforms, {status}", fontsize=8)
     if not args.plain:
         fig.legend(handles=[Patch(color=COLOURS[DUG], label="tunnel dug"),
                             Patch(color=COLOURS[FILLED], label="dead air filled"),
                             Patch(color=COLOURS[PLATFORM], label="platform"),
-                            Patch(color=COLOURS[UNREACHABLE], label="unreachable air filled")],
-                   loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.04))
+                            Patch(color=COLOURS[UNREACHABLE], label="unreachable air filled"),
+                            Patch(color=COLOURS[PIT], label="pit shaft")],
+                   loc="lower center", ncol=5, bbox_to_anchor=(0.5, -0.04))
     fig.suptitle("Generated maps (black = rock)", fontsize=13)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

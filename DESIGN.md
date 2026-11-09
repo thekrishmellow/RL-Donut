@@ -29,7 +29,7 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 6. Regions and corridors: usable positions, region joining, dead-air filling, centre crossings — done
 7. Placement, split in three:
    - 7a. Jetpack reachability + floating platforms — done
-   - 7b. Bottom pits
+   - 7b. Bottom pits — done (runs before 7a in the pipeline)
    - 7c. Spawn points
 8. Validation (reachability acceptance, fairness, line of sight) + retry
 9. Batch generation, seed splits, cache, stats report
@@ -57,7 +57,7 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M14 | Symmetry type | Left/right mirror (not 180° rotation) | With height bias, rotation would give one side the ground and the other the sky |
 | M15 | Rock fraction after smoothing | Accept drift (mean +1%, max +3.4%); record target and final fraction (`Terrain.final_rock_fraction`) | Forcing exactness would undo part of the smoothing. Mirrored rock also comes in pairs, so the pre-smoothing count can be one tile over an odd target |
 | M16 | Border | 1 tile of rock on all four sides (solid ceiling); engine also treats beyond top/sides as solid | Fastest motion is 20 tiles/s ÷ 30 ticks = 0.67 tiles per tick, so a 1-tile wall can't be skipped (Phase 2 test keeps this < 1); 1 tile costs ~6% of the map vs ~12% for 2; a solid ceiling stops off-screen camping |
-| M17 | Pit layout | Count drawn uniformly from 0–2: 1 = centred on the seam, 2 = mirrored pair; width 3–6 tiles; shaft carved up from the bottom edge, at most 10 tiles deep; fewer pits if none fit, actual count recorded | Keeps symmetry; ≤ 6 tiles is crossable with ~1 s of jetpack; a centre pit creates a contested hazard |
+| M17 | Pit layout | Count drawn uniformly from 0–2: 1 = centred on the seam, 2 = mirrored pair; width 3–6 tiles; shaft carved up from the bottom edge, at most 10 tiles deep; fewer pits if none fit, actual count recorded (superseded by M36: retry instead) | Keeps symmetry; ≤ 6 tiles is crossable with ~1 s of jetpack; a centre pit creates a contested hazard |
 | M18 | Pit timing | Pits are carved in step 7, after pocket filling, and must open into the main play region | The prototype carved a pit into a sealed air bubble that no one could reach |
 | M19 | Kill line | Dead once the whole hitbox is more than `kill_margin` (default 3) tiles below the bottom edge; stored as `GeneratedMap.kill_y` | The fall stays visible briefly; one value shared by generator and engine |
 | M20 | Tunnel digging | Cheapest path (Dijkstra over box positions): each step costs 1 plus 12 per rock tile in the box; every tunnel is mirrored and 2 × 3 wide; the border is never dug; refined by M30 (staircases) | Reuses existing caves and digs only gaps (mean 38 tiles dug per map); straight lines dig too much and look artificial; random walks are unpredictable |
@@ -76,6 +76,10 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M30 | Staircase tunnels | Digging vertically right after a vertical step costs 3× (`vertical_run_cost`), so tunnels climb as staircases | Straight dug shafts taller than the climb budget were one-way traps. Fully reachable maps went 78% → ~94%; digging per map is unchanged (39 vs 38 tiles) |
 | M31 | Reachability acceptance | Accept a map when it is trap-free (every floor reachable from the main area can get back) and at most 2% of floor is unreachable; spawns only on the main area; step 8 rejects and retries the rest | Unreachable floor is never visited, so it is harmless in small amounts; traps are never acceptable. Strict 100% would reject maps for 2-tile notches |
 | M32 | Unreachable air | Air no reachable flight can occupy is filled with rock when it is ≤ 3% of the map's air; larger unreachable caverns are left for step 8 to reject | Same idea as dead air (M22). Filling everything would delete up to 41% of a map's air (whole upper caverns behind tall necks) |
+| M33 | Pit order | Pits are cut before platforms | Ledges can repair any reachability a pit breaks, and unreachable fill and cover see the final floors |
+| M34 | Pit opening | Every pit column must open through floor in the main reachable group; the pit must keep one region and the crossing rule, strand no extra floor, and stay trap-free | Pits belong on walked paths; a pit under an unvisited cavern teaches nothing |
+| M35 | No lids | Platforms may not use columns within 2 tiles of a pit | A ledge over a pit would make it harmless |
+| M36 | Pit shortfall | If the requested count doesn't fit, step 8 rejects the map and retries with the next attempt (replaces "fewer pits" in M17) | Otherwise "1 pit" would quietly become "0 pits" on ~60% of maps and the curriculum would get fewer pits than it asks for. Costs ~1.4 attempts per finished map |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits (planned)

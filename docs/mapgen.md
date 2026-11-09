@@ -28,9 +28,9 @@ flowchart TD
     T --> C[4. Cellular-automata smoothing<br/>terrain.smooth]
     C --> M[5. Border + kill line<br/>generator.add_border]
     M --> RG[6. Regions + corridors<br/>regions.connect_regions]
-    RG --> PL[7a. Reachability + platforms<br/>reach.py, platforms.py]
-    PL --> PT[7b. Pits]
-    PT --> SP[7c. Spawns]
+    RG --> PT[7b. Pits<br/>pits.py]
+    PT --> PL[7a. Reachability + platforms<br/>reach.py, platforms.py]
+    PL --> SP[7c. Spawns]
     SP --> V[8. Validation + retry]
     V --> B[9. Batch generation, seed splits, cache]
 ```
@@ -44,8 +44,11 @@ flowchart TD
 | 5. Border + kill line | done | `src/rl_donut/mapgen/generator.py` |
 | 6. Regions + corridors | done | `src/rl_donut/mapgen/regions.py` |
 | 7a. Reachability + platforms | done | `src/rl_donut/mapgen/reach.py`, `src/rl_donut/mapgen/platforms.py` |
-| 7b. Pits | next | — |
-| 7c. Spawns | planned | — |
+| 7b. Pits | done | `src/rl_donut/mapgen/pits.py` |
+| 7c. Spawns | next | — |
+
+Steps are numbered in the order they were built. In the pipeline, pits (7b) run before
+platforms (7a), so ledges can repair anything a pit breaks and no platform covers a pit.
 | 8. Validation + retry | planned | — |
 | 9. Batch generation | planned | — |
 
@@ -500,6 +503,72 @@ unreachable air in purple, and titles flag any map with a trap.
   clear air, stays inside the border). On 30 maps: platforms are rock and match the layer,
   keep standing room, are symmetric, and keep one region; the fill is small and can be
   disabled. Plus reproducibility and config validation.
+
+---
+
+## Step 7b: Bottom pits (`pits.py`)
+
+A pit is a shaft cut up through the bottom edge. An agent that falls through it and drops
+below the kill line (step 5) dies. Pits teach fuel management: you can jetpack back out
+of a pit if you still have fuel.
+
+### Where a pit can go
+
+- **Count** is drawn from the `PITS` stream: 0, 1 (centred on the seam) or 2 (a mirrored
+  pair, at least one clearance box apart). Training starts at `count=(0, 0)` and widens to
+  `(0, 2)` as a curriculum step.
+- **Width** is 3–6 tiles. A centred pit adjusts its width by one so it stays symmetric.
+- **Opening.** Every column of the pit must have its lowest air resting on floor that
+  belongs to the main reachable group (`main_floor_columns`). Pits sit on walked paths,
+  not under caverns nobody visits.
+- **Depth.** Each column is cut from its lowest air down through the bottom edge, at most
+  `max_depth` (10) rock tiles.
+
+### What a pit must not break
+
+Each candidate (up to `tries` = 40 random positions) is cut into a copy of the map and kept
+only if the map stays one region, keeps the centre-crossing rule, strands no extra floor,
+and stays trap-free. If nothing fits, no pits are cut and `pits_requested` records what the
+seed asked for. **Step 8 rejects any map with fewer pits than requested** and retries with
+the next `attempt`, so a map always gets the count it asked for.
+
+### Pits and the flight model
+
+No new code was needed. A pit shaft has no rock under it, so it contains no standing
+spots: a fall into it never lands anywhere, which the flight model treats as leaving the
+map, not as a trap. Crossing a pit costs at most 6 sideways moves out of a 24-unit tank.
+
+### No lids
+
+Platforms may not use any column within `platform_margin` (2) tiles of a pit
+(`pit_columns`, passed to `place_platforms`). A ledge over a pit would act as a lid and
+make it harmless.
+
+### Numbers (200 seeds)
+
+| Requested | Maps | Placed in full |
+|---|---|---|
+| 0 | 65 | 65 |
+| 1 (centred) | 69 | 28 (41%) |
+| 2 (pair) | 66 | 54 (82%) |
+
+A centred pit needs main-group floor right at the bottom of the seam, which only about half
+of all maps have. Together with the reachability rule, about 30% of first attempts will be
+retried in step 8, averaging about 1.4 attempts (~0.3 s) per finished map. Generation takes
+about 210 ms per attempt. Most shafts are shallow (median 7 tiles), and all maps stay symmetric.
+
+### What it records
+
+`GeneratedMap` gains `pits` (x0, width, and `top`: the highest opening row), `pits_requested`
+and `layers["pits"]` (tiles the shafts cleared). The preview draws pits in red, and titles
+show placed/requested pits.
+
+**Tests** (`tests/test_pits.py`): lowest air per column, centred and paired spans are
+symmetric, the platform margin around pits, both pit counts cut through a room's floor,
+shafts deeper than `max_depth` are refused, zero pits changes nothing, and falling into a
+pit is not a trap. On 40 generated maps: pits open through the bottom edge, are symmetric
+and fully counted, keep one region and no traps, have no platform above them, and at least
+10 maps get pits. Plus config validation and a golden test for seed 10's pits.
 
 ---
 
