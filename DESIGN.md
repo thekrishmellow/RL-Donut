@@ -26,9 +26,9 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 3. Mirrored noise + quantile threshold to tile grid — done
 4. Cellular-automata smoothing — done
 5. Border + kill line — done
-6. Platforms and corridors
-7. Connectivity, pocket filling, bottom pits, spawn detection
-8. Validation + retry
+6. Regions and corridors: usable positions, region joining, dead-air filling, centre crossings — done
+7. Floating platforms, bottom pits, spawn points
+8. Validation (jetpack reachability, fairness, line of sight) + retry
 9. Batch generation, seed splits, cache, stats report
 
 ## Decisions
@@ -57,6 +57,11 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M17 | Pit layout | Count drawn uniformly from 0–2: 1 = centred on the seam, 2 = mirrored pair; width 3–6 tiles; shaft carved up from the bottom edge, at most 10 tiles deep; fewer pits if none fit, actual count recorded | Keeps symmetry; ≤ 6 tiles is crossable with ~1 s of jetpack; a centre pit creates a contested hazard |
 | M18 | Pit timing | Pits are carved in step 7, after pocket filling, and must open into the main play region | The prototype carved a pit into a sealed air bubble that no one could reach |
 | M19 | Kill line | Dead once the whole hitbox is more than `kill_margin` (default 3) tiles below the bottom edge; stored as `GeneratedMap.kill_y` | The fall stays visible briefly; one value shared by generator and engine |
+| M20 | Tunnel digging | Cheapest path (Dijkstra over box positions): each step costs 1 plus 12 per rock tile in the box; every tunnel is mirrored and 2 × 3 wide; the border is never dug | Reuses existing caves and digs only gaps (mean 38 tiles dug per map); straight lines dig too much and look artificial; random walks are unpredictable |
+| M21 | Small regions | Regions with < 60 usable positions are filled; larger ones are joined to the main region | "Fill small, join large" (M6) with a concrete threshold |
+| M22 | Dead air | Fill every air tile no agent box in the main region can cover | Sealed bubbles and thin cracks are unusable; cracks would let bullets through gaps no agent can enter; what you see is exactly the playable space |
+| M23 | Centre crossings | At least 2 separate routes across the centre line, or one opening ≥ 12 rows tall; extra crossings dug ≥ 6 rows from existing ones | A single narrow choke point makes camping it the dominant strategy. The first rule counted a 35–44-row open centre as "1 route" on 39 of 300 maps; those are wide open, not choke points |
+| M24 | Step order | Step 6 = regions and corridors; step 7 = platforms, pits, spawns | Joining regions is the connectivity work; platforms must be placed in the final open spaces without blocking tunnels |
 | M11 | Falling off the map | 0–2 bottom pits per seed (3–6 tiles wide, own `PITS` stream); engine kill line below the map is always on; curriculum starts with 0 pits | Fall deaths teach fuel management; sampling stops the agent assuming either layout; the kill line is also a safety net for physics bugs |
 | G4 | Kill credit for falls | Deferred to Phase 5 (rewards) | It is a reward-design question |
 | E2 | Preview images | matplotlib (scripts only, never imported by the generator) | Labeled grids and colorbars; reused for training charts later |

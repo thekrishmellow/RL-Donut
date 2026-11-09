@@ -76,6 +76,35 @@ class PitConfig:
 
 
 @dataclass(frozen=True)
+class RegionConfig:
+    # Box that must fit entirely in air for a position to be usable: agent hitbox 0.8 x 1.6 plus margin.
+    clearance_w: int = 2
+    clearance_h: int = 3
+    # Regions with fewer usable positions than this are filled with rock instead of joined.
+    min_region: int = 60
+    # Cost of digging one rock tile relative to moving one tile through air.
+    rock_cost: float = 12.0
+    # Required number of separate routes across the centre line, unless one opening is at
+    # least wide_crossing rows tall (too wide for one agent to block).
+    min_crossings: int = 2
+    wide_crossing: int = 12
+    # New centre-line crossings must be at least this many rows away from existing ones.
+    crossing_gap: int = 6
+    # Safety cap on tunnels dug per map.
+    max_tunnels: int = 16
+
+    def __post_init__(self):
+        if self.clearance_w < 1 or self.clearance_h < 1:
+            raise ValueError("clearance must be at least 1 x 1")
+        if self.min_region < 1:
+            raise ValueError("min_region must be >= 1")
+        if self.rock_cost < 0:
+            raise ValueError("rock_cost must be >= 0")
+        if self.min_crossings < 1 or self.crossing_gap < 0 or self.max_tunnels < 1 or self.wide_crossing < 1:
+            raise ValueError("min_crossings, wide_crossing and max_tunnels must be >= 1, crossing_gap >= 0")
+
+
+@dataclass(frozen=True)
 class MapConfig:
     width: int = 96
     height: int = 48
@@ -83,6 +112,7 @@ class MapConfig:
     border: int = 1
     noise: NoiseConfig = field(default_factory=NoiseConfig)
     terrain: TerrainConfig = field(default_factory=TerrainConfig)
+    regions: RegionConfig = field(default_factory=RegionConfig)
     pits: PitConfig = field(default_factory=PitConfig)
 
     def __post_init__(self):

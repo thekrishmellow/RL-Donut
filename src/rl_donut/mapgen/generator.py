@@ -1,10 +1,11 @@
 """Full map pipeline: seed -> finished map. Each Phase 1 step adds a stage here."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from rl_donut.mapgen.config import MapConfig
+from rl_donut.mapgen.regions import connect_regions
 from rl_donut.mapgen.seeding import GENERATOR_VERSION
 from rl_donut.mapgen.terrain import ROCK, MapParams, terrain_grid
 
@@ -21,6 +22,12 @@ class GeneratedMap:
     terrain_rock_fraction: float
     # World y (in tiles) past which an agent whose whole hitbox is below it is dead.
     kill_y: float
+    tunnels: int
+    # Separate routes across the centre line, and the tallest of them in anchor rows.
+    crossings: int
+    widest_crossing: int
+    # Boolean masks of what each stage changed, for previews and debugging.
+    layers: dict[str, np.ndarray] = field(default_factory=dict, compare=False, repr=False)
 
     @property
     def rock_fraction(self) -> float:
@@ -40,12 +47,17 @@ def generate_map(seed: int, cfg: MapConfig | None = None, attempt: int = 0) -> G
     cfg = cfg or MapConfig()
     terrain = terrain_grid(seed, cfg, attempt)
     grid = add_border(terrain.grid, cfg.border)
+    regions = connect_regions(grid, cfg.regions, cfg.border, mirror=cfg.terrain.mirror)
     return GeneratedMap(
         seed=seed,
         attempt=attempt,
         generator_version=GENERATOR_VERSION,
-        grid=grid,
+        grid=regions.grid,
         params=terrain.params,
         terrain_rock_fraction=terrain.final_rock_fraction,
         kill_y=cfg.height + cfg.pits.kill_margin,
+        tunnels=regions.tunnels,
+        crossings=regions.crossings,
+        widest_crossing=regions.widest_crossing,
+        layers={"dug": regions.dug, "filled": regions.filled},
     )

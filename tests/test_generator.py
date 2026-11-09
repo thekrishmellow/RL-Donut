@@ -20,7 +20,7 @@ def test_border_is_solid_on_all_four_sides(thickness):
 
 def test_border_leaves_interior_untouched():
     terrain = terrain_grid(5, CFG).grid
-    grid = generate_map(5, CFG).grid
+    grid = add_border(terrain, 1)
     assert np.array_equal(grid[1:-1, 1:-1], terrain[1:-1, 1:-1])
 
 
@@ -42,7 +42,6 @@ def test_map_records_metadata():
     assert game_map.generator_version == GENERATOR_VERSION
     assert game_map.kill_y == CFG.height + CFG.pits.kill_margin
     assert game_map.rock_fraction == pytest.approx(game_map.grid.mean())
-    assert game_map.rock_fraction > game_map.terrain_rock_fraction
 
 
 def test_kill_margin_is_configurable():
@@ -76,5 +75,6 @@ def test_map_config_rejects_invalid_border(kwargs):
 
 def test_golden_generated_map_seed_42():
     game_map = generate_map(42)
-    assert int(game_map.grid.sum()) == 2624
-    assert hashlib.sha256(game_map.grid.tobytes()).hexdigest()[:16] == "3230a46365dbb1df"
+    assert int(game_map.grid.sum()) == 2854
+    assert (game_map.tunnels, game_map.crossings, game_map.widest_crossing) == (1, 2, 8)
+    assert hashlib.sha256(game_map.grid.tobytes()).hexdigest()[:16] == "964a6a5062422501"
