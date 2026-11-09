@@ -33,7 +33,8 @@ flowchart TD
     PL --> SP[7c. Spawns<br/>spawns.py, geometry.py]
     SP --> V[8. Validation + retry<br/>validation.py]
     V -- rejected: attempt + 1 --> P
-    V --> B[9. Batch generation, seed splits, cache]
+    V --> B[9. Seed splits + cache<br/>splits.py, cache.py, scripts/build_maps.py]
+    B --> D[(data/maps/train, val, test)]
 ```
 
 | Step | Status | Code |
@@ -48,7 +49,7 @@ flowchart TD
 | 7b. Pits | done | `src/rl_donut/mapgen/pits.py` |
 | 7c. Spawns | done | `src/rl_donut/mapgen/spawns.py`, `src/rl_donut/mapgen/geometry.py` |
 | 8. Validation + retry | done | `src/rl_donut/mapgen/validation.py` |
-| 9. Batch generation | next | — |
+| 9. Seed splits + cache | done | `src/rl_donut/mapgen/splits.py`, `src/rl_donut/mapgen/cache.py`, `scripts/build_maps.py` |
 
 Steps are numbered in the order they were built. In the pipeline, pits (7b) run before
 platforms (7a), so ledges can repair anything a pit breaks and no platform covers a pit.
@@ -701,6 +702,119 @@ checks that parameters stay fixed across retries and that pit counts cover 0–2
 
 ---
 
+## Step 9: Seed splits and the map cache (`splits.py`, `cache.py`, `scripts/build_maps.py`)
+
+Generating a map takes about a second, mostly spent on validation and retries. Training
+resets thousands of episodes, so maps are generated once, saved, and loaded from disk.
+The splits decide which seeds are used for what, so we can measure how well agents handle
+maps they have never seen.
+
+### Splits (`splits.py`)
+
+| Split | Seeds | Used for |
+|---|---|---|
+| `train` | 0 – 9,999 | Training episodes |
+| `val` | 10,000 – 10,999 | Checkpoint selection and tuning during development |
+| `test` | 20,000 – 20,999 | Final evaluation only; never used to choose anything |
+
+The gap between 11,000 and 19,999 stays unused, so splits can grow without overlapping.
+OOD splits (seeds 30,000+ with shifted settings, such as more rock or wider pits) are
+defined in Phase 8, once we know which shifts are worth testing.
+
+### Storage format (`cache.py`)
+
+Each split is three files in `data/maps/`:
+
+| File | Contents |
+|---|---|
+| `<split>.npz` | Every grid, stacked into one compressed uint8 array (about 250 B per map) |
+| `<split>.json` | A header (split name, `generator_version`, numpy version, the full `MapConfig`, skipped seeds), then one line per map with all its metadata and a 16-character SHA-256 hash of its grid |
+| `<split>.md` | The stats report written by the build script |
+
+Preview layers (`GeneratedMap.layers`) are not stored: they are only for pictures and can
+be regenerated from the seed.
+
+`load_split(name)` refuses to load (raises `CacheError`) when:
+
+- the files are missing,
+- the split was built by a different `GENERATOR_VERSION`,
+- the stored `MapConfig` differs from the one passed in (by default, `MapConfig()`),
+- the number of grids and records disagree, or
+- any grid no longer matches its hash.
+
+So old maps are never silently mixed with new settings.
+
+**Why all splits are committed to git.** Anyone who clones the repository evaluates on
+exactly the same maps, even if a future numpy release changes its random streams. The
+whole cache is about 15 MB.
+
+### Freeze policy
+
+The committed maps are the reference. Any change that alters generator output must:
+
+1. bump `GENERATOR_VERSION`,
+2. rebuild all three splits, and
+3. note the change in `DESIGN.md`.
+
+Results from different generator versions are not comparable. The drift test
+(`test_frozen_split_matches_the_generator`) regenerates the first three val and test seeds
+and compares their hashes with the committed ones, so a forgotten version bump fails CI.
+
+### Seeds that never pass
+
+When a seed fails all 30 attempts, the build records it in the manifest's `skipped` list
+with its rejection reasons and moves on. The split then has slightly fewer maps, rather
+than a hand-picked replacement seed.
+
+### The build script (`scripts/build_maps.py`)
+
+```bash
+.venv/bin/python scripts/build_maps.py --split val --workers 8
+```
+
+- Seeds run in parallel with `multiprocessing`, in chunks of 200.
+- Each finished chunk is saved to the git-ignored `map_cache/build/<split>/`. An
+  interrupted build resumes from the last finished chunk; re-running a finished build
+  only re-saves the files.
+- At the end it writes the split files and the report `data/maps/<split>.md`, plus charts
+  in `outputs/map_stats_<split>.png`. The charts show attempts per map, design rock
+  fraction, final air fraction, platforms per map, unreachable floor and pit count.
+- The report contains nothing that depends on build time, so rebuilding identical maps
+  produces identical files.
+
+### Numbers
+
+See `data/maps/<split>.md` for the full report of each split.
+
+| Split | Maps kept | Skipped | Mean / worst attempts | Pit mix (0 / 1 / 2) | Fully reachable |
+|---|---|---|---|---|---|
+| train | 9,997 | 3 | 1.92 / 28 | 33.6% / 32.9% / 33.6% | 99.6% |
+| val | 1,000 | 0 | 1.89 / 18 | 32.6% / 31.5% / 35.9% | 99.7% |
+| test | 1,000 | 0 | 1.88 / 19 | 33.2% / 31.8% / 35.0% | 99.6% |
+
+The three skipped train seeds (4126, 5902, 6566) all combine one centred pit with rock
+fraction ≥ 0.53 and height bias ≥ 0.25: a thick, bottom-heavy floor where a centred shaft
+rarely opens onto main-group floor. Step 8 estimated about 0.1 skipped seeds per 12,000,
+but that estimate averaged over height bias and missed how hard this corner is. Losing
+3 of 10,000 maps does not visibly change the kept distribution.
+
+On a busy machine, the build took 12.6 minutes for val, 9.9 for test and 91 for train.
+
+**Tests** (`tests/test_cache.py`):
+
+- the splits never overlap and have the planned sizes;
+- a save/load round trip keeps every field;
+- the manifest records skipped seeds and versions;
+- loading refuses missing files, a different config, a different generator version and a
+  corrupted grid;
+- the drift test above;
+- every committed split loads, has its maps in seed order, and accounts for every seed as
+  kept or skipped.
+
+The last two skip if the splits aren't built yet.
+
+---
+
 ## Glossary
 
 | Term | Meaning |
@@ -738,3 +852,6 @@ checks that parameters stay fixed across retries and that pit counts cover 0–2
 | Attempt | One try at generating a seed's map; retries use attempt 1, 2, … |
 | Design settings | A seed's rock fraction, height bias and pit count; fixed across attempts |
 | Rejection reason | Why validation refused an attempt (e.g. `pits`, `trap`) |
+| Split | A fixed range of seeds with one purpose: train, val or test |
+| Manifest | The `<split>.json` file describing every cached map |
+| Drift | The generator's output changing for a seed whose map is already frozen |

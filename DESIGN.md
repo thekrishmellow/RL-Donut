@@ -3,6 +3,9 @@
 Mini Militia-inspired 2D multi-agent RL arena: jetpack movement, hitscan combat,
 seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 
+This file logs approved decisions. The whole-project plan (architecture, draft designs for
+later phases, infrastructure, open decisions) is in [`docs/PLAN.md`](docs/PLAN.md).
+
 ## Phases
 
 | Phase | Scope | Milestones |
@@ -32,7 +35,7 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
    - 7b. Bottom pits — done (runs before 7a in the pipeline)
    - 7c. Spawn points — done
 8. Validation + retry — done
-9. Batch generation, seed splits, cache, stats report
+9. Batch generation, seed splits, cache, stats report — done
 
 ## Decisions
 
@@ -88,13 +91,20 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M42 | Validation checks | Reject on trap, > 2% stranded floor, pit shortfall, spawn shortfall; plus safety re-checks of symmetry, one region + crossings, and the border | The first four are the acceptance rules from M31, M36, M37; the re-checks are cheap and catch future bugs |
 | M43 | Retry cap | 30 attempts per seed, then `MapGenerationError` | Worst seen in 3,000 seeds was 24; expected ~0.1 seeds per 12,000 hit the cap |
 | M44 | Minimum open space | No check | Only 0.2% of maps have under 30% air |
+| M45 | Map cache format | Per split: one compressed `.npz` of grids plus a `.json` manifest (versions, full `MapConfig`, one line per map with metadata and grid hash); loading refuses version, config, count or hash mismatches | Loading 10,000 maps takes seconds instead of hours; the checks stop stale maps being mixed with new settings. One line per map keeps git diffs readable. Pickle was rejected: unreadable, tied to class layouts, unsafe to load |
+| M46 | Commit the cache | All splits, including train (~15 MB), are committed in `data/maps/` | Every clone trains and evaluates on identical maps, even if numpy's random streams change later |
+| M47 | Freeze policy | Any change to generator output bumps `GENERATOR_VERSION` and rebuilds every split; a drift test regenerates a few val and test seeds and compares hashes | Results across generator versions are not comparable, so changes must be loud |
+| M48 | Exhausted seeds | A seed that fails all attempts is skipped and listed in the manifest | Keeps seed ranges fixed; no hand-picked replacements. In practice 3 of 10,000 train seeds (all centred pit + rock ≥ 0.53 + height bias ≥ 0.25), 0 in val and test |
+| M49 | OOD splits | Deferred to Phase 8 | Which shifts are worth testing depends on what the agents learn |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
-## Seed splits (planned)
+## Seed splits
+
+Defined in `src/rl_donut/mapgen/splits.py`; built maps live in `data/maps/`.
 
 | Split | Seeds |
 |---|---|
 | train | 0 – 9,999 |
 | val | 10,000 – 10,999 |
 | test | 20,000 – 20,999 (untouched until final eval) |
-| OOD | 30,000+ with shifted generator/physics params |
+| OOD | 30,000+ with shifted generator/physics params (Phase 8) |

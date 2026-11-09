@@ -1,0 +1,348 @@
+# RL-Donut — Project Plan and Technical Design
+
+This is the one place that describes the whole project: what we are building, in what
+order, how the pieces fit together, what runs where, and which decisions are made or still
+open. It is a living document; update it whenever a phase lands or a plan changes.
+
+| Document | Role |
+|---|---|
+| `docs/PLAN.md` (this file) | The whole project: goals, roadmap, architecture, infrastructure, open decisions |
+| [`DESIGN.md`](../DESIGN.md) | Decision log: every approved choice, numbered, with its reason |
+| [`docs/mapgen.md`](mapgen.md) | Deep dive into the map generator (Phase 1), step by step |
+| [`README.md`](../README.md) | Setup, everyday commands, repository layout |
+
+Status markers used below: **approved** (in `DESIGN.md`, may be built), **draft** (a
+starting proposal; must be discussed and approved before code), **open** (no proposal yet).
+
+---
+
+## 1. Goal
+
+Build a Mini Militia-inspired 2D arena in which reinforcement-learning agents with jetpacks
+and rifles learn to fight through PPO and self-play on procedurally generated cave maps,
+and show that what they learn **carries over to maps they have never seen**. The project
+follows the EvoArena brief's 12 milestones:
+
+| # | Milestone | Phase |
+|---|---|---|
+| 1 | Gaming environment design | 2 |
+| 2 | Procedural map generation | 1 |
+| 3 | Agent observation and action spaces | 3 |
+| 4 | Reward function design | 5 |
+| 5 | PPO implementation | 5 |
+| 6 | Multi-agent reinforcement learning | 6 |
+| 7 | Self-play training framework | 6 |
+| 8 | Multi-agent cooperation and competition | 6 |
+| 9 | Adaptive opponent training | 7 |
+| 10 | Unseen environment generalization | 8 |
+| 11 | Interactive training dashboard | 9 |
+| 12 | Performance benchmarking and evaluation | 10 |
+
+**Approved high-level choices:** 2D side view (G1), structured observations rather than
+pixels (G1), health regeneration on (G2), final format 1v1 and/or 2v2 decided later (G3).
+
+## 2. How we work
+
+Every step follows the same loop:
+
+1. **Discuss.** For any decision that affects the project: why we need it, the
+   alternatives, facts checked against sources or measurements, and what to learn about it.
+2. **Approve.** Nothing is coded until the choice is approved.
+3. **Build.** Code, tests and a picture or measurement wherever it helps.
+4. **Review.** We look at the output together.
+5. **Commit.** One commit per step; the docs are updated in the same commit.
+
+Approved decisions are logged in `DESIGN.md` with an ID (`G` game, `E` environment and
+tooling, `M` map generator; later phases add their own letters).
+
+## 3. Status
+
+| Phase | Scope | Milestones | Status |
+|---|---|---|---|
+| 0 | Project setup | — | done |
+| 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **next** |
+| 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
+| 4 | Scripted bots, renderer, replay files | — | planned |
+| 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
+| 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | planned |
+| 7 | Adaptive opponents, style policies | 9 | planned |
+| 8 | Generalization evaluation (held-out and OOD maps) | 10 | planned |
+| 9 | Dashboard | 11 | planned |
+| 10 | Benchmarks and final report | 12 | planned |
+
+---
+
+## 4. Architecture
+
+### Data flow
+
+```mermaid
+flowchart LR
+    subgraph P1[Phase 1: maps]
+        G[mapgen<br/>seed -> GeneratedMap] --> C[(data/maps<br/>train / val / test)]
+    end
+    subgraph P2[Phase 2-3: environment]
+        E[engine<br/>physics, rifle, match rules] --> W[PettingZoo ParallelEnv<br/>observations, actions]
+        W --> V[vectorized envs]
+    end
+    subgraph P5[Phase 4-7: learning]
+        B[scripted bots]
+        T[PPO trainer] --> K[(runs/id<br/>checkpoints, metrics)]
+        K --> O[opponent pool + Elo]
+        O --> T
+    end
+    subgraph P8[Phase 8-10: evaluation]
+        X[eval + benchmarks] --> R[(replays, reports)]
+        R --> D[dashboard]
+    end
+    C --> E
+    V --> T
+    B --> T
+    K --> X
+    B --> X
+    C --> X
+```
+
+### Packages
+
+| Package | Phase | Responsibility | Status |
+|---|---|---|---|
+| `rl_donut.mapgen` | 1 | Seed -> validated map; splits and cache | built |
+| `rl_donut.env` | 2–4 | Engine (pure numpy, no rendering), PettingZoo wrapper, bots, renderer, replays | planned |
+| `rl_donut.rl` | 5–7 | PPO, opponent pool, Elo, style policies | planned |
+| `rl_donut.eval` | 8, 10 | Generalization tests, benchmark suite, statistics | planned |
+| `dashboard/` | 9 | Interactive app reading runs and replays | planned |
+
+Rules that keep the pieces independent:
+
+- The engine never imports rendering code; rendering reads engine state.
+- Training reads maps only through `load_split`, never by regenerating them.
+- Anything shown in the dashboard is read from files (`runs/`, replays), so it works
+  offline and can be built before training exists.
+
+### Contracts between phases
+
+| Contract | Defined by | Used by | Status |
+|---|---|---|---|
+| `GeneratedMap` (grid, spawns, pits, kill line, metadata) | Phase 1 | engine | approved, built |
+| `MapConfig.climb_budget = 12`: the engine must climb at least 12 tiles on one tank | M26 | engine test | approved |
+| Fastest motion < 1 tile per tick, so 1-tile walls can't be skipped | M16 | engine test | approved |
+| Hitscan uses `mapgen.geometry.line_of_sight`, so "can't see" = "can't be shot" | M40 | engine | approved |
+| Scripted bot reaches ≥ 99% of random route targets | M4b | engine test | approved |
+| Env API: `reset(seed)`, `step(actions: dict[agent_id, ndarray])` in PettingZoo parallel form, `get_state()` | — | RL, replays | draft |
+| Replay file `.json.gz`: `{seed, config, map, ticks: [{agents, shots, events}]}` | — | dashboard | draft |
+| Metrics: `runs/<id>/metrics.jsonl` (optionally mirrored to an experiment tracker) | — | dashboard | draft |
+| Checkpoint: `runs/<id>/ckpt_<update>.pt` with weights, observation statistics, config, git commit | — | eval, pool | draft |
+
+---
+
+## 5. Technical design by phase
+
+Numbers in **draft** sections are starting points from the first design spec; each is
+re-examined, measured where possible, and approved when its phase starts.
+
+### Phase 1 — Map generator (approved, built)
+
+Seeded pipeline: Perlin + FBM noise on the left half, mirrored, quantile-thresholded,
+smoothed, bordered; regions joined with staircase tunnels; pits, platforms, spawns;
+validation with retry; 10,000 train, 1,000 val and 1,000 test maps cached in `data/maps/`.
+Full details in [`docs/mapgen.md`](mapgen.md); decisions M1–M49.
+
+### Phase 2 — Game engine (draft)
+
+| Area | Draft |
+|---|---|
+| World | 96 × 48 tile grid, 1 tile = 1 world unit; solid outside the map except below pits |
+| Timing | 30 physics ticks per second; agent decides every 2 ticks (15 decisions/s); 60 s matches |
+| Body | Hitbox 0.8 × 1.6 tiles; axis-aligned box collision against tiles; no physics library |
+| Movement | Run 6 tiles/s; gravity 25 tiles/s²; jetpack thrust 40 tiles/s² (net 15 up); max fall 20 tiles/s |
+| Fuel | 100; drains 40/s flying, refills 25/s on the ground |
+| Rifle | Hitscan; 15 damage; 0.2 s between shots; ±2° spread; 30-round magazine, 1.5 s auto-reload, unlimited reserve; 30-tile range |
+| Health | 100; regenerates 10/s after 3 s without damage (on, per G2) |
+| Match | Timed deathmatch with respawns: 2 s respawn at a spawn out of enemy sight, 1 s protection; most kills wins, equal is a draw |
+| Out of scope for v1 | Grenades (first v2 addition), pickups, weapon switching, melee, zoom, dual wield |
+
+Required tests, from Phase 1 contracts: climb at least `climb_budget` on one tank; motion
+< 1 tile per tick; scripted route check on many seeds; hitscan agrees with line of sight.
+
+Open questions for the Phase 2 discussion:
+
+- **The draft breaks the wall contract.** It caps falling speed but not rising speed. A
+  full tank gives 2.5 s of thrust at a net 15 tiles/s², reaching 37.5 tiles/s, which is
+  1.25 tiles per tick, over the 1-tile limit (M16). Phase 2 needs an upward speed cap (or
+  different constants).
+- Whether the draft physics satisfies the climb contract, and how much spare it has.
+- Collision resolution order.
+- How falling through a pit is scored.
+- How domain randomization (gravity and thrust ±15%) is applied without breaking either
+  contract.
+
+### Phase 3 — RL interface (draft)
+
+- **Actions:** `MultiDiscrete([3, 2, 16, 2])`: move (left / none / right), jetpack
+  (off / on), aim (16 directions), shoot (no / yes).
+- **Observations (~150 numbers, egocentric, normalized):**
+  - self: health, ammo, fuel, velocity, on-ground, reloading, cooldown, aim sin/cos, direction last hit from;
+  - 24 rays: distance and hit type (wall / enemy / ally / nothing);
+  - 2 enemy slots: visible flag, relative position and velocity, health, time since seen;
+    zeroed or frozen when out of sight (no wallhack);
+  - ally: relative position, health, alive;
+  - match: time left, score difference.
+- **Memory:** stack 4 frames first; an LSTM only if partial observability hurts.
+- **Optional:** a 15 × 15 local tile crop with a small CNN, only if navigation is weak.
+- **Speed benchmark:** environment steps per second, measured before any training. The
+  target depends on the compute decision below.
+
+### Phase 4 — Bots, renderer, replays (draft)
+
+- Scripted bots: random, static target, turret (aims and shoots from cover), rusher
+  (chases and shoots). These are the fixed yardstick that self-play Elo can't inflate.
+- Renderer reads engine state; replays are saved per match and drive both the dashboard
+  and debugging.
+
+### Phase 5 — Rewards and PPO (draft)
+
+- **Reward:** sparse (+1 win, −1 loss, 0 draw) + α × shaping (kill +0.3, death −0.3,
+  ±0.003 per damage point dealt / taken, −0.0005 per step). α falls from 1.0 to 0.1 over
+  the first 60% of training.
+- **Exploit watchlist,** logged from the first run: draw rate, engagement distance,
+  hovering time, shots per hit, kills near spawns.
+- **PPO:** single-file, CleanRL-style implementation (we need custom opponent logic);
+  shared MLP 2 × 256 with one head per action part and a separate value network; 64
+  environments × 256 steps, 8 minibatches × 4 epochs, learning rate 3e-4 decaying,
+  γ 0.99, λ 0.95, clip 0.2, entropy 0.01 → 0.001, value coefficient 0.5, gradient clip 0.5,
+  running observation normalization.
+- **Curriculum gates:** hit a static target ≥ 90% → beat the turret bot ≥ 70% → beat the
+  rusher bot ≥ 60% → self-play → 2v2. Pits start at 0 per map (`PitConfig.count`) and are
+  widened to 0–2 as a curriculum step.
+
+### Phase 6 — Self-play (draft)
+
+- Snapshot every 50 updates; it joins the pool only if it beats the previous snapshot
+  ≥ 55%. Pool of up to 30 snapshots plus permanent bots and style policies.
+- Opponent sampling: 50% latest, 30% pool weighted toward opponents the learner loses to
+  (prioritized fictitious self-play), 20% bots and style policies.
+- 2v2: parameter sharing with a team ID; a centralized critic (MAPPO) for the 2v2 stage;
+  each agent's reward = 0.5 × team + 0.5 × own.
+- Reported Elo comes from an offline round-robin (every 10 snapshots, 100 matches per pair,
+  sides swapped), not from noisy in-training updates.
+
+### Phase 7 — Adaptive opponents and styles (draft)
+
+- Adaptive opponents: choose pool opponents so the learner's win rate stays around 50–60%.
+- Style policies with different reward weights: aggressive (2× damage dealt), defensive
+  (2× damage taken penalty), sniper (bonus for long-range kills).
+
+### Phase 8 — Generalization (draft, map side approved)
+
+- Three tiers: train seeds, held-out seeds (`val` for development, `test` once at the end),
+  and OOD seeds (30,000+) with shifted settings, e.g. rock 30–35% or 60–65% (M8), wider
+  pits, asymmetric maps, gravity and thrust ±25%. OOD splits are defined in this phase (M49).
+- Headline number: the **generalization gap**, win rate on train seeds minus win rate on
+  unseen seeds, against fixed bots and a frozen checkpoint.
+
+### Phase 9 — Dashboard (draft)
+
+- Elo over generations, win rate against each bot, generalization gap, behaviour stats
+  (accuracy, jetpack use, time in cover, engagement distance, teammate spacing), replay
+  viewer with seed switching, human-vs-AI play, and a Generation 1 vs Generation N demo.
+
+### Phase 10 — Benchmarks and report (draft)
+
+- 200 matches per pairing on test seeds, sides swapped halfway; win rates with 95% Wilson
+  confidence intervals; the main metrics above, collected into a final report.
+
+---
+
+## 6. Technology
+
+| Area | Tool | Status | Why / alternatives |
+|---|---|---|---|
+| Language | Python 3.13 (3.11+ supported) | approved | RL ecosystem; numpy vectorization for speed |
+| Environment | venv + exactly pinned `requirements.txt` | approved (E1) | Zero extra tooling; uv or conda were not needed |
+| Numerics | numpy 2.5.4, pinned | approved (M1, M3) | Map reproducibility depends on its random streams |
+| Tests | pytest 9.2 | approved | Standard; golden-value and drift tests |
+| Charts and previews | matplotlib 3.11, scripts only | approved (E2) | Never imported by library code |
+| Deep learning | PyTorch | draft (Phase 5) | Named in the brief; alternative JAX is faster on accelerators but adds friction on a Mac |
+| Multi-agent API | PettingZoo `ParallelEnv` (+ Gymnasium spaces) | draft (Phase 3) | Named in the brief; standard multi-agent interface |
+| Rendering | Pygame or matplotlib-based | open (Phase 4) | Only for viewing; the engine stays headless |
+| Experiment tracking | Local `metrics.jsonl`; optionally Weights & Biases or TensorBoard | open (Phase 5) | Local files keep the dashboard offline-capable |
+| Dashboard | Streamlit suggested | open (Phase 9) | Fastest to build; alternative FastAPI + a web front end is more flexible but slower to build |
+
+No tool in the draft or open rows is installed until its phase's discussion approves it.
+
+---
+
+## 7. Infrastructure
+
+### Compute
+
+| Resource | Value | Implication |
+|---|---|---|
+| Machine | Apple M4, 4 performance + 6 efficiency cores, 16 GB memory | CPU-bound simulation; ~8 parallel workers in practice |
+| GPU | Integrated M4 GPU (PyTorch "MPS" backend) | For 2 × 256 MLPs, CPU is often as fast; measure in Phase 5 |
+| Disk | 26 GB free (94% used) | Checkpoints and replays must be pruned; keep `runs/` lean |
+| Background load | Load average often 10–28 from other apps | Benchmarks must report load; timings in docs are on a busy machine |
+
+The draft PPO numbers (64 environments, ≥ 10,000 steps/s) assumed a multi-core desktop
+with a GPU. On this laptop the realistic targets are probably 16–32 environments and a
+lower step rate; Phase 3's speed benchmark decides.
+
+### Storage layout
+
+| Path | Contents | In git |
+|---|---|---|
+| `src/`, `tests/`, `scripts/`, `docs/` | Code and documentation | yes |
+| `data/maps/` | Frozen train / val / test maps (~14 MB) | yes (M46) |
+| `map_cache/` | Resumable build chunks | no |
+| `outputs/` | Preview images, charts, logs | no |
+| `runs/<id>/` | Checkpoints, metrics, replays per training run | no (selected results may be exported) |
+
+### Reproducibility
+
+- Every random choice comes from a named, seeded stream (M2); retries use attempt numbers.
+- numpy is pinned; `GENERATOR_VERSION` is stored with every map; golden tests pin exact outputs.
+- Built maps are frozen in git; any output change bumps the version and rebuilds (M47),
+  and a drift test catches forgotten bumps.
+- Checkpoints will record config and git commit, so every result can be traced to code.
+
+### Version control and CI
+
+- Git, one commit per approved step. **No remote yet**: the repository exists only on
+  this laptop, so a remote (GitHub or Origin) is needed before friends join, and as a backup.
+- No CI yet. Once a remote exists, run the test suite on every push; the full suite takes
+  ~6 minutes on a busy laptop, so slow tests may need a marker.
+
+### Team
+
+Currently two people (you and the assistant). Later, friends may own separate areas; the
+contracts in section 4 exist so each area can be built against them independently.
+
+---
+
+## 8. Risks
+
+| Risk | Mitigation |
+|---|---|
+| Engine physics breaks map assumptions (climb, wall thickness) | Phase 2 contract tests fail loudly; generator settings can change with a version bump |
+| Environment too slow for PPO on this laptop | Benchmark in Phase 3 before training; batch physics across environments in numpy |
+| PPO fails to beat the turret bot | Check observations and rewards via replays first; then simplify (slower bot, shorter range) |
+| Self-play cycles between strategies | More matches against old snapshots; detect with offline Elo |
+| Reward exploits (camping, spawn camping, spam) | Exploit watchlist from the first run |
+| 2v2 not ready | 1v1 still covers multi-agent learning and self-play |
+| Disk fills with checkpoints | Keep only pool members and milestones; prune automatically |
+| Only one copy of the work | Add a git remote (open decision) |
+
+## 9. Open decisions
+
+| Decision | When | Notes |
+|---|---|---|
+| Final format: 1v1, 2v2 or both | Phase 6 | G3 |
+| Grenades in v1 or v2 | Phase 2 | Draft says v2 |
+| Physics constants and the climb contract | Phase 2 | Draft numbers above |
+| Kill credit for falls | Phase 5 | G4 |
+| PyTorch, PettingZoo, renderer, tracker, dashboard tool | Their phases | Section 6 |
+| Compute targets (environments, steps/s) | Phase 3 | Section 7 |
+| OOD split definitions | Phase 8 | M49 |
+| Git remote and CI | Any time; before friends join | Section 7 |
