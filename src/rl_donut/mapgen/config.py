@@ -52,8 +52,41 @@ class TerrainConfig:
 
 
 @dataclass(frozen=True)
+class PitConfig:
+    # Pits per map, drawn uniformly from this inclusive range: 1 = centred, 2 = mirrored pair.
+    # Training starts at (0, 0) and is widened to (0, 2) as a curriculum step.
+    count: tuple[int, int] = (0, 2)
+    width: tuple[int, int] = (3, 6)
+    # Deepest shaft carved upward from the bottom edge to reach air.
+    max_depth: int = 10
+    # An agent dies once its whole hitbox is more than this many tiles below the bottom edge.
+    kill_margin: float = 3.0
+
+    def __post_init__(self):
+        lo, hi = self.count
+        if not 0 <= lo <= hi <= 2:
+            raise ValueError("pit count must satisfy 0 <= low <= high <= 2")
+        lo, hi = self.width
+        if not 2 <= lo <= hi:
+            raise ValueError("pit width must satisfy 2 <= low <= high (agent clearance is 2 wide)")
+        if self.max_depth < 1:
+            raise ValueError("max_depth must be >= 1")
+        if self.kill_margin < 0:
+            raise ValueError("kill_margin must be >= 0")
+
+
+@dataclass(frozen=True)
 class MapConfig:
     width: int = 96
     height: int = 48
+    # Solid rock frame on all four sides; pits later cut through the bottom edge.
+    border: int = 1
     noise: NoiseConfig = field(default_factory=NoiseConfig)
     terrain: TerrainConfig = field(default_factory=TerrainConfig)
+    pits: PitConfig = field(default_factory=PitConfig)
+
+    def __post_init__(self):
+        if self.border < 1:
+            raise ValueError("border must be >= 1")
+        if min(self.width, self.height) <= 2 * self.border + 2:
+            raise ValueError("map is too small for its border")

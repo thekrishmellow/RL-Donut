@@ -26,9 +26,9 @@ flowchart TD
     Q --> T[3. Threshold to rock/air<br/>terrain.threshold]
     MI --> T
     T --> C[4. Cellular-automata smoothing<br/>terrain.smooth]
-    C --> M[5. Borders + bottom pits]
+    C --> M[5. Border + kill line<br/>generator.add_border]
     M --> PL[6. Platforms + corridors]
-    PL --> CN[7. Connectivity + spawn points]
+    PL --> CN[7. Connectivity, pockets, pits, spawns]
     CN --> V[8. Validation + retry]
     V --> B[9. Batch generation, seed splits, cache]
 ```
@@ -39,9 +39,9 @@ flowchart TD
 | 2. Perlin + FBM | done | `src/rl_donut/mapgen/noise.py` |
 | 3. Mirroring + threshold | done | `src/rl_donut/mapgen/terrain.py` |
 | 4. Smoothing | done | `src/rl_donut/mapgen/terrain.py` |
-| 5. Borders + bottom pits | next | — |
-| 6. Platforms + corridors | planned | — |
-| 7. Connectivity + spawns | planned | — |
+| 5. Border + kill line | done | `src/rl_donut/mapgen/generator.py` |
+| 6. Platforms + corridors | next | — |
+| 7. Connectivity, pockets, pits, spawns | planned | — |
 | 8. Validation + retry | planned | — |
 | 9. Batch generation | planned | — |
 
@@ -258,6 +258,55 @@ grid fingerprint for seed 42.
 
 ---
 
+## Step 5: Border and kill line (`generator.py`)
+
+**Purpose.** Close the map so agents can't leave through the top or sides, and define where
+falling agents die.
+
+**The pipeline entry point.** `generate_map(seed, cfg, attempt)` runs every stage and returns
+a `GeneratedMap`:
+
+| Field | Meaning |
+|---|---|
+| `seed`, `attempt`, `generator_version` | Exactly which generator run produced this map |
+| `grid` | Tile grid indexed `[row, col]`; row 0 is the top, so y grows downward |
+| `params` | The per-map values drawn from `PARAMS` |
+| `terrain_rock_fraction` | Rock share after smoothing, before the border |
+| `rock_fraction` | Rock share of the finished grid |
+| `kill_y` | Agents whose whole hitbox is below this y are dead |
+
+**Border.** `add_border` sets a 1-tile frame of rock (`MapConfig.border`). The top is a
+solid ceiling, so agents can't fly above the map and camp off-screen. The engine (Phase 2)
+also treats everything beyond the top and sides as solid, as a safety net.
+
+Why 1 tile is enough: the fastest motion is a 20 tiles/s fall at 30 physics ticks per
+second, which is 0.67 tiles per tick. An agent can't skip over a 1-tile wall in one tick.
+Phase 2 will test that motion per tick stays below 1 tile. A 1-tile border costs about 6%
+of the map; 2 tiles would cost about 12%.
+
+**Kill line.** `kill_y = height + PitConfig.kill_margin` (default 3 tiles). An agent dies
+once its whole hitbox is beyond `kill_y`, so a fall into a pit is briefly visible before
+the death. Generator and engine read the same value.
+
+**Pits (configured here, carved in step 7).** `PitConfig` holds the pit settings and
+`Stream.PITS` their randomness:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `count` | (0, 2) | 0 = closed floor, 1 = pit centred on the seam, 2 = mirrored pair. Training starts at (0, 0) as a curriculum step. |
+| `width` | (3, 6) | Tiles; at least 2 (agent clearance). ≤ 6 is crossable with about 1 s of jetpack. |
+| `max_depth` | 10 | Deepest shaft carved upward from the bottom edge to reach air |
+
+Pits are carved after pocket filling in step 7, because a prototype carved a pit straight
+into a sealed air bubble that no one could ever reach. In step 7 a pit is only accepted if
+it opens into the main play region.
+
+**Tests** (`tests/test_generator.py`): border solid on all four sides for thickness 1 and 2,
+interior untouched, input not modified, maps stay symmetric, metadata recorded, kill margin
+configurable, reproducible, invalid pit and border settings rejected, golden map for seed 42.
+
+---
+
 ## Glossary
 
 | Term | Meaning |
@@ -271,3 +320,6 @@ grid fingerprint for seed 42.
 | Height bias | Extra rock toward the bottom of the map |
 | Golden test | Test that pins exact outputs so silent changes are caught |
 | OOD | Out-of-distribution: settings never seen in training, used to test generalization |
+| Pit | Gap through the bottom edge; falling through it kills the agent |
+| Kill line | The y position below which a falling agent is dead |
+| Curriculum | Training that starts easy (e.g. no pits) and gets harder |

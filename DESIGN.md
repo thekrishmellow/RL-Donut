@@ -25,9 +25,9 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 2. Perlin noise + FBM — done
 3. Mirrored noise + quantile threshold to tile grid — done
 4. Cellular-automata smoothing — done
-5. Borders + bottom pits
+5. Border + kill line — done
 6. Platforms and corridors
-7. Connectivity + spawn detection
+7. Connectivity, pocket filling, bottom pits, spawn detection
 8. Validation + retry
 9. Batch generation, seed splits, cache, stats report
 
@@ -53,6 +53,10 @@ seeded procedural cave maps, PPO + self-play, generalization to unseen maps.
 | M13 | Mirror order | Generate left-half noise, mirror it, then threshold and smooth the full map | Smoothing a half map treats the seam as rock and grows a wall down the centre; the smoothing rule is symmetric, so symmetry survives every later step |
 | M14 | Symmetry type | Left/right mirror (not 180° rotation) | With height bias, rotation would give one side the ground and the other the sky |
 | M15 | Rock fraction after smoothing | Accept drift (mean +1%, max +3.4%); record target and final fraction (`Terrain.final_rock_fraction`) | Forcing exactness would undo part of the smoothing. Mirrored rock also comes in pairs, so the pre-smoothing count can be one tile over an odd target |
+| M16 | Border | 1 tile of rock on all four sides (solid ceiling); engine also treats beyond top/sides as solid | Fastest motion is 20 tiles/s ÷ 30 ticks = 0.67 tiles per tick, so a 1-tile wall can't be skipped (Phase 2 test keeps this < 1); 1 tile costs ~6% of the map vs ~12% for 2; a solid ceiling stops off-screen camping |
+| M17 | Pit layout | Count drawn uniformly from 0–2: 1 = centred on the seam, 2 = mirrored pair; width 3–6 tiles; shaft carved up from the bottom edge, at most 10 tiles deep; fewer pits if none fit, actual count recorded | Keeps symmetry; ≤ 6 tiles is crossable with ~1 s of jetpack; a centre pit creates a contested hazard |
+| M18 | Pit timing | Pits are carved in step 7, after pocket filling, and must open into the main play region | The prototype carved a pit into a sealed air bubble that no one could reach |
+| M19 | Kill line | Dead once the whole hitbox is more than `kill_margin` (default 3) tiles below the bottom edge; stored as `GeneratedMap.kill_y` | The fall stays visible briefly; one value shared by generator and engine |
 | M11 | Falling off the map | 0–2 bottom pits per seed (3–6 tiles wide, own `PITS` stream); engine kill line below the map is always on; curriculum starts with 0 pits | Fall deaths teach fuel management; sampling stops the agent assuming either layout; the kill line is also a safety net for physics bugs |
 | G4 | Kill credit for falls | Deferred to Phase 5 (rewards) | It is a reward-design question |
 | E2 | Preview images | matplotlib (scripts only, never imported by the generator) | Labeled grids and colorbars; reused for training charts later |

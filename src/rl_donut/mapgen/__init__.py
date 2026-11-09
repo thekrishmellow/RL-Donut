@@ -1,4 +1,5 @@
-from rl_donut.mapgen.config import MapConfig, NoiseConfig, TerrainConfig
+from rl_donut.mapgen.config import MapConfig, NoiseConfig, PitConfig, TerrainConfig
+from rl_donut.mapgen.generator import GeneratedMap, add_border, generate_map
 from rl_donut.mapgen.noise import fbm, perlin_grid
 from rl_donut.mapgen.seeding import GENERATOR_VERSION, Stream, make_rng
 from rl_donut.mapgen.terrain import (
@@ -6,7 +7,7 @@ from rl_donut.mapgen.terrain import (
 )
 
 __all__ = [
-    "AIR", "GENERATOR_VERSION", "ROCK", "MapConfig", "MapParams", "NoiseConfig", "Stream", "Terrain",
-    "TerrainConfig", "fbm", "make_rng", "map_noise", "perlin_grid", "rock_neighbours", "sample_params",
-    "smooth", "terrain_grid", "threshold",
+    "AIR", "GENERATOR_VERSION", "ROCK", "GeneratedMap", "MapConfig", "MapParams", "NoiseConfig", "PitConfig",
+    "Stream", "Terrain", "TerrainConfig", "add_border", "fbm", "generate_map", "make_rng", "map_noise",
+    "perlin_grid", "rock_neighbours", "sample_params", "smooth", "terrain_grid", "threshold",
 ]

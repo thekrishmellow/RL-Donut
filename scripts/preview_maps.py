@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from rl_donut.mapgen import MapConfig, terrain_grid
+from rl_donut.mapgen import MapConfig, generate_map
 
 
 def main():
@@ -26,12 +26,12 @@ def main():
     for ax in axes.flat:
         ax.axis("off")
     for ax, seed in zip(axes.flat, range(args.start, args.start + args.count)):
-        terrain = terrain_grid(seed, cfg)
-        params = terrain.params
-        ax.imshow(terrain.grid, cmap="Greys", interpolation="nearest", vmin=0, vmax=1)
-        ax.set_title(f"seed {seed}: rock {params.rock_fraction:.0%} -> {terrain.final_rock_fraction:.0%}, "
-                     f"bias {params.height_bias:.2f}", fontsize=10)
-    fig.suptitle("Generated terrain (black = rock)", fontsize=13)
+        game_map = generate_map(seed, cfg)
+        params = game_map.params
+        ax.imshow(game_map.grid, cmap="Greys", interpolation="nearest", vmin=0, vmax=1)
+        ax.set_title(f"seed {seed}: rock {params.rock_fraction:.0%} -> {game_map.terrain_rock_fraction:.0%} "
+                     f"(+border {game_map.rock_fraction:.0%}), bias {params.height_bias:.2f}", fontsize=9)
+    fig.suptitle("Generated maps (black = rock)", fontsize=13)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, dpi=100)

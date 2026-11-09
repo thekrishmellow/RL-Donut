@@ -20,6 +20,7 @@ class Stream(IntEnum):
     SPAWNS = 3
     DOMAIN = 4
     PARAMS = 5
+    PITS = 6
 
 
 def make_rng(master_seed: int, stream: Stream, attempt: int = 0) -> np.random.Generator:
