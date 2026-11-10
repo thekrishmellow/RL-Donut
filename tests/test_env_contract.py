@@ -137,3 +137,4 @@ def test_events_consistency_over_combat():
         assert (ev.hits <= ev.shots).all()
         assert (ev.damage_dealt >= 0.0).all()
         assert (ev.damage_taken >= 0.0).all()
+
