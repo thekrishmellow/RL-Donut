@@ -2,6 +2,8 @@
 
 from rl_donut.rl.bots import RandomBot, StaticTargetBot
 from rl_donut.rl.checkpoints import CheckpointManager
+from rl_donut.rl.curriculum import CurriculumManager, CurriculumStage
+from rl_donut.rl.evaluate import EvalReport, evaluate_policy, wilson_score_interval
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.ppo import LearnedPolicy, PPOConfig, PPOTrainer, compute_gae
 from rl_donut.rl.rewards import RewardWeights, anneal_alpha, compute_reward
@@ -12,6 +14,9 @@ from rl_donut.rl.watchlist import WatchlistReport, WatchlistThresholds, Watchlis
 __all__ = [
     "ActorCritic",
     "CheckpointManager",
+    "CurriculumManager",
+    "CurriculumStage",
+    "EvalReport",
     "Events",
     "LearnedPolicy",
     "PPOConfig",
@@ -31,4 +36,6 @@ __all__ = [
     "anneal_alpha",
     "compute_gae",
     "compute_reward",
+    "evaluate_policy",
+    "wilson_score_interval",
 ]

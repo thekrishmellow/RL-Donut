@@ -24,9 +24,9 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | **5.4** | **done** | PPO implementation (`rl_donut.rl.ppo`) |
 | **5.5** | **done** | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
 | **5.6** | **done** | Logging, exploit watchlist, checkpoint manager |
-| **5.7** | next | Curriculum (static target → turret → rusher → pits) |
-| **5.8** | planned | Evaluation against fixed bots (`scripts/eval_bots.py`) |
-| **6.1** | planned | Checkpoint snapshot pool (`rl_donut.rl.pool`) |
+| **5.7** | **done** | Curriculum (static target → random bot → pits) |
+| **5.8** | **done** | Evaluation against fixed bots (`scripts/eval_bots.py`, `evaluate.py`) |
+| **6.1** | next | Checkpoint snapshot pool (`rl_donut.rl.pool`) |
 | **6.2** | planned | Opponent sampling (PFSP + latest self + bots) |
 | **6.3** | planned | Offline Elo round-robin (`rl_donut.rl.elo`) |
 | **6.4** | planned | 1v1 self-play training run |
@@ -53,6 +53,9 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | R12 | Single-process rollout | Batched numpy rollouts in the main training process | Eliminates IPC serialization overhead and worker synchronization bottlenecks on loaded multi-core machines. |
 | R13 | Exploit alarm thresholds | Draw > 35%, hover > 50%, engagement dist < 3.0 tiles, shots/hit > 8, spawn kills > 40% | Detects passive camping, ceiling stalling, spawn entrapment, and blind shooting early before degenerate policies consolidate. |
 | R14 | Checkpoint retention | Keep latest 5 checkpoints plus milestone snapshots every 100 updates | Strict automatic pruning avoids filling the host machine's remaining disk space while preserving milestones for the opponent pool. |
+| R15 | Curriculum progression | Stage 1 (static target, 90% win), Stage 2 (random bot no pits, 80%), Stage 3 (random bot with pits, 75%) | Progressively introduces targeting, moving targets, and fall hazard navigation before self-play. Turret/Rusher gates run after Phase 4 merge. |
+| R16 | Pit curriculum filtering | Filter frozen maps on `len(m.pits) == 0` | Avoids regenerating maps and preserves exact frozen seed splits committed in `data/maps/`. |
+| R17 | Evaluation protocol | Half-split side swapping on held-out `val` seeds with 95% Wilson intervals | Guarantees zero side bias and reports statistically rigorous confidence intervals on benchmark win rates. |
 
 ---
 
@@ -205,3 +208,40 @@ Automatically monitors training episodes for degenerate RL strategies:
 - Automatically saves PyTorch model and optimizer states.
 - Preserves all milestone checkpoints (`update % 100 == 0`).
 - Prunes intermediate checkpoints to keep at most the last 5 updates, protecting host storage space.
+
+
+---
+
+## Step 5.7: Curriculum Progression
+
+### Stages & Gates (`curriculum.py`)
+1. **Stage 1 (Static Target, No Pits)**:
+   - Opponent: `StaticTargetBot`
+   - Map filter: `len(m.pits) == 0` (flat bottom maps from `train`)
+   - Gate: $\ge 90\%$ win rate over 20 evaluation matches.
+2. **Stage 2 (Random Motion, No Pits)**:
+   - Opponent: `RandomBot`
+   - Map filter: `len(m.pits) == 0`
+   - Gate: $\ge 80\%$ win rate.
+3. **Stage 3 (Random Motion, All Maps / Bottom Pits)**:
+   - Opponent: `RandomBot`
+   - Map filter: `None` (includes maps with 1 or 2 bottom pits)
+   - Gate: $\ge 75\%$ win rate.
+4. *(Stages 4 & 5 vs Turret and Rusher bots will unlock following Phase 4 merge).*
+
+---
+
+## Step 5.8: Evaluation Against Bots
+
+### Evaluation Harness (`evaluate.py`)
+- Evaluates any two policies over $N$ matches.
+- Swaps sides halfway ($N/2$ matches with learner as Team A, $N/2$ as Team B) to ensure zero side bias.
+- Reports win, loss, and draw counts along with 95% Wilson score confidence intervals.
+- Computes mean kills, deaths, damage dealt, and damage taken per match.
+
+### Evaluation CLI (`scripts/eval_bots.py`)
+Command-line tool for evaluating trained checkpoints:
+```bash
+python scripts/eval_bots.py --checkpoint runs/<id>/ckpt_0050.pt --opponent static --n-matches 20
+```
+Outputs detailed combat and survival metrics with statistical confidence intervals.
