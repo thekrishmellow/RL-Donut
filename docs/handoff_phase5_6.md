@@ -78,8 +78,9 @@ an array of shape (matches, agents), agents ordered team A first (`[A, B]` in 1v
 | Route check | `env/navigation.py` | `Navigator` and `RouteBot`: plans and flies routes between floors (99.80% arrive). Useful for scripted bots |
 | Rifle | `env/rifle.py` | `fire(world, aim, trigger) -> list[Shot]`; hitscan, 15 damage, 0.2 s between shots, 30 rounds, 1.5 s reload, 30-tile range, ±2° spread, no friendly fire; aim is any angle in radians (0 = right, π/2 = down) |
 | Life | `env/life.py` | `life_tick(world, shots) -> LifeEvents` (damage dealt and taken, `Death`s, respawns); same-tick hits applied together; a fall's `Death` has no killer but records the last damager and when (for G4) |
-
 | Match | `env/match.py` | `match_step(world, move, jet, aim, trigger) -> MatchEvents`: one decision step (2 ticks) for every match; 60 s deathmatch, `World.score`, `done`, `outcome`; `MatchEvents` has exactly the event fields of section 4.2; `World.load_maps` restarts chosen matches on new maps |
+| Actions (Phase 3) | `env/actions.py` | `decode(discrete, continuous) -> Controls` for `match_step`; layout in section 4.1 |
+| Visibility (Phase 3) | `env/visibility.py`, `env/raycast.py` | `visibility(world)`: `own` and `team` (M, A, A) bool, [m, i, j] = i sees enemy j (centre or any hitbox corner in line of sight, any distance; `team` adds living teammates' sightings). `raycast.segments` checks thousands of lines of sight at once, identical to `line_of_sight` |
 
 The engine is complete. Next, Team A's Phase 3 wraps `match_step` with observations into
 the real `MatchEnv`. To watch a match, run `scripts/view_match.py`; engine speed is about
@@ -333,7 +334,8 @@ Build: `rl_donut.rl.stand_in.StandInEnv` following section 4, plus
   physics, rifle, health, respawn and scoring. Add observations and auto-reset
   (`World.load_maps`).
 - Observations: a simple version of the Phase 3 draft (self state, relative enemy position
-  if in line of sight, a few rays). Keep it behind one function so it's easy to delete.
+  when `visibility(world).team` says it is seen, a few rays). Keep it behind one function so
+  it's easy to delete.
 - Actions: the real mixed layout of section 4.1. Use `rl_donut.env.actions.decode` to turn
   them into `match_step` inputs, so the stand-in and the real env read actions identically.
 

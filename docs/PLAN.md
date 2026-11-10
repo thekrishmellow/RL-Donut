@@ -193,6 +193,9 @@ Still open:
   and shoot (no / yes), plus one continuous aim angle in radians (a Gaussian head in PPO).
   Continuous aim allows 98% of perfectly aimed shots to hit at real engagement distances,
   against 46% for 16 fixed directions.
+- **Visibility (approved, I3–I5):** an enemy is seen when its centre or any hitbox corner is
+  in line of sight, at any distance; in 2v2 teammates share sightings, with a separate "seen by
+  me" flag. Computed for the whole batch by an exact numpy ray caster.
 - **Observations (~150 numbers, egocentric, normalized):**
   - self: health, ammo, fuel, velocity, on-ground, reloading, cooldown, aim sin/cos, direction last hit from;
   - 24 rays: distance and hit type (wall / enemy / ally / nothing);

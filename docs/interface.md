@@ -9,7 +9,7 @@ in [`DESIGN.md`](../DESIGN.md) with `I` IDs.
 | Step | What | Status |
 |---|---|---|
 | 1 | Action space | done |
-| 2 | Visibility | — |
+| 2 | Visibility | done |
 | 3 | Observations | — |
 | 4 | Batched `MatchEnv` | — |
 | 5 | Shared contract test | — |
@@ -72,3 +72,80 @@ categorical heads. This is the standard setup for continuous control.
   same mirroring applies to team B's move and aim before `decode`.
 
 Run the measurement again with `.venv/bin/python scripts/aim_ceiling.py --maps 100` (about 7 s).
+
+## Step 2 — Visibility
+
+`visibility(world)` in `rl_donut.env.visibility` answers "who can see whom" for the whole
+batch. It returns two (M, A, A) arrays, where entry [m, i, j] is about agent i looking at agent j:
+- `own`: i sees j itself;
+- `team`: i or a living teammate sees j.
+
+Both are False unless i and j are alive and on different teams. Step 3.3 uses them to decide
+which enemy information goes into each observation: nothing about unseen enemies, so no wallhack.
+
+### What counts as seeing (I3)
+
+An agent sees an enemy when a line from its own hitbox centre reaches the enemy's centre
+**or any of the four corners of its hitbox** without touching rock, **at any distance**.
+The rifle fires from the same centre, so this is close to "could I hit some part of them".
+Measured on 5,738 pairs of positions on val maps where some part of the enemy can be shot:
+
+| What is checked | Shootable enemies reported as unseen |
+|---|---|
+| Centre only | 10.6% |
+| Centre, head and feet | 2.5% |
+| Centre and the 4 hitbox corners | 0.1% |
+
+Checking the centre alone misses peeking enemies. These are mostly enemies on a ledge whose
+head shows over the edge, and they can shoot you while the observation calls them hidden.
+`scripts/preview_visibility.py` draws, for one agent, every standing spot on a map coloured
+by what that agent would see of an enemy there. The orange spots are the ones a centre-only
+check would miss.
+
+The corners sit 0.05 tiles inside the hitbox. A standing agent's feet touch the floor exactly,
+and the grid walk counts a point on a tile edge as inside that tile, so un-inset corners would
+always be "in rock".
+
+Any distance means only rock blocks sight. This matches the respawn rule (P21), and an agent
+can see an enemy beyond rifle range and plan an approach. A screen-sized window would be an
+invented limit with no tactical purpose.
+
+### Team sight (I4)
+
+In 2v2, an enemy is known when the agent **or a living teammate** sees it, as if players call
+out positions. The observation still flags whether the agent sees the enemy itself, since
+"I can shoot them now" and "my teammate says they're there" are different facts. Dead
+teammates report nothing.
+
+### A fast, exact ray caster (I5)
+
+Every check above is a line of sight. The map generator's `line_of_sight` walks the grid tile
+by tile along the line (the Amanatides and Woo method): it repeatedly asks whether the line
+crosses a vertical or a horizontal tile edge next, steps into that tile, and stops at the
+first rock. It is exact, but in pure Python it costs about 3.7 µs per line, and visibility
+needs up to 5 lines per pair of enemies.
+
+`rl_donut.env.raycast.segments` runs the same walk for **all lines at once** in numpy. Every
+unfinished line advances one tile per loop iteration, using the same arithmetic in the same
+order, so its answers are identical. A test compares the two on 100,000 random segments,
+including segments through exact tile corners, along grid lines, of zero length, and leaving
+the map. Two details make it fast:
+- **A rock frame.** Each grid is padded with one tile of rock. A walk that starts inside the
+  map stops on the frame before it can leave, so no step needs a bounds check.
+- **Flat tile indices.** A tile is a single number that moves by 1 for a column step and by
+  a row's length for a row step.
+
+It also returns where along each line the first rock is entered. Step 3.3's distance rays will
+use that.
+
+Time per decision step for 64 matches (`scripts/bench_engine.py --visibility`):
+
+| Format | Engine | Visibility, pure Python | Visibility, batched |
+|---|---|---|---|
+| 1v1 | 0.45 ms | 2.2 ms | 0.8 ms |
+| 2v2 | 0.60 ms | 9.3 ms | 1.4 ms |
+
+The batched cost is set by the **longest** walk, because the loop runs until the last line
+finishes, and the fixed cost of each numpy call dominates. It therefore grows slowly with
+batch size: at 256 matches in 1v1, engine plus visibility runs 110,000 match steps per second.
+If this becomes the bottleneck, step 3.7 will look at it again.

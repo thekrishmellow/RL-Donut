@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) in progress: action space done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) in progress: action space and visibility done.
 
 ## Documentation
 
@@ -44,6 +44,8 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/view_match.py --team-size 2 --close   # watch a match: outputs/match.gif and a filmstrip outputs/match.png
 .venv/bin/python scripts/bench_engine.py                       # engine speed by batch size, split by component
 .venv/bin/python scripts/aim_ceiling.py                        # best possible hit rate of each aim design on real maps
+.venv/bin/python scripts/preview_visibility.py                 # what one agent sees of enemies at every spot -> outputs/visibility_preview.png
+.venv/bin/python scripts/bench_engine.py --visibility          # engine speed including visibility
 ```
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
@@ -65,6 +67,8 @@ RL-Donut/
 ├── src/rl_donut/
 │   ├── env/                   Phase 2: game engine (many matches per batch); Phase 3: RL interface
 │   │   ├── actions.py         Action layout (3 discrete parts + continuous aim) and decode to engine controls
+│   │   ├── raycast.py         Thousands of exact lines of sight at once (numpy grid walk)
+│   │   ├── visibility.py      Who sees whom: centre or hitbox corners in sight, team sight
 │   │   ├── config.py          EngineConfig and its parts: physics, rifle, life, match settings
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
@@ -99,6 +103,7 @@ RL-Donut/
 │   ├── view_match.py          Debug viewer: one match as a GIF and a filmstrip
 │   ├── bench_engine.py        Engine speed check
 │   ├── aim_ceiling.py         Hit-rate ceiling of each aim design
+│   ├── preview_visibility.py  Visibility picture
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
 ├── map_cache/                 Resumable build chunks (git-ignored)

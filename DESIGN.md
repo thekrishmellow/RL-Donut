@@ -55,7 +55,7 @@ Each step ends with a test or picture; its decisions are discussed when it start
 Guide: [`docs/interface.md`](docs/interface.md).
 
 1. Action space: discrete move, jetpack, shoot + continuous aim — done
-2. Visibility (what each agent can see)
+2. Visibility: batched exact ray caster, who sees whom, team sight — done
 3. Observations
 4. Batched `MatchEnv` (auto-reset, events, episode stats)
 5. Shared contract test
@@ -152,6 +152,9 @@ Guide: [`docs/interface.md`](docs/interface.md).
 | P28 | Engine speed check | `scripts/bench_engine.py`, results in `docs/engine.md`, no timing assertion in tests; bar ≥ 50,000 match decision steps/s at 64 matches 1v1 | The laptop's load swings, so timing tests would fail at random. Measured 73,700 (1v1) and 55,200 (2v2) at 64 matches; the per-shot Python rifle is 25–59% of the time and the first thing to speed up |
 | I1 | Aim action | One continuous angle in radians, any real number, never clipped or wrapped; PPO samples it from a Gaussian head | A perfect aimer limited to 16 fixed directions hits 46% of shots at real engagement distances (median 10.8 tiles), 32 → 71%, 64 → 88%, 128 → 95%, continuous → 98% (`scripts/aim_ceiling.py`). Aim relative to the nearest seen enemy was rejected for now: it builds targeting into the action. It stays the fallback if aiming learns too slowly |
 | I2 | Action layout | Discrete move (left / none / right), jetpack (off / on), shoot (no / yes) as `(3, 2, 2)`, plus the aim; `env.actions.decode` turns them into `match_step` inputs | The discrete parts were already approved in the plan; one decode function keeps Team B's stand-in and the real env identical. Handoff `spec_version` 0.1 |
+| I3 | Seeing an enemy | A line from the agent's hitbox centre reaches the living enemy's centre or one of its four hitbox corners (inset 0.05 tile) without touching rock, at any distance; dead agents see nothing | Centre-only checks reported 10.6% of shootable enemies as unseen (peeking heads), centre + head + feet 2.5%, centre + corners 0.1%. Any distance matches the respawn rule (P21) and lets agents plan approaches. The inset keeps a standing agent's feet off the floor tiles |
+| I4 | Team sight (2v2) | `team` = seen by the agent or a living teammate; `own` kept as a separate flag | Like players calling out positions; less hidden state for PPO, and the flag keeps both facts |
+| I5 | Batched ray caster | `env/raycast.py`: the `line_of_sight` grid walk run for all segments in lockstep in numpy, on grids padded with a rock frame; also returns where rock is entered (for the rays of step 3.3) | Identical to `line_of_sight` on 100,000 random segments. Visibility at 64 matches costs about 0.8 ms per step in 1v1 and 1.4 ms in 2v2, against 2.2 and 9.3 ms in pure Python; no new dependency (Numba would need a numpy 2.5.4 check). Cost is bound by the longest walk, not the number of segments |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits
