@@ -102,3 +102,4 @@ class WatchlistTracker:
             spawn_kill_fraction=sk_frac,
             alarms=alarms,
         )
+

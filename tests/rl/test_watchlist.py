@@ -35,3 +35,4 @@ def test_watchlist_clean_behavior():
     assert not report.has_alarms
     assert report.draw_rate == 0.0
     assert report.mean_engagement_dist > 10.0
+

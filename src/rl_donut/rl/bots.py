@@ -32,3 +32,4 @@ class StaticTargetBot:
         actions = np.zeros((n, 4), dtype=np.int64)
         actions[:, 0] = 1
         return actions
+

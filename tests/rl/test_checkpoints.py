@@ -29,3 +29,4 @@ def test_checkpoint_pruning(tmp_path: Path):
     assert "ckpt_0006.pt" in files_after
     assert "ckpt_0007.pt" in files_after
     assert "ckpt_0003.pt" not in files_after  # pruned
+

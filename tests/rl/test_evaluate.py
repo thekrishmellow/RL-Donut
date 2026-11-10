@@ -30,3 +30,4 @@ def test_evaluate_policy_swaps_sides():
     assert report.wins + report.losses + report.draws == 4
     assert 0.0 <= report.win_rate <= 1.0
     assert 0.0 <= report.wilson_ci_lower <= report.wilson_ci_upper <= 1.0
+

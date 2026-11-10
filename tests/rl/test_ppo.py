@@ -118,3 +118,4 @@ def test_learned_policy_protocol():
     obs = np.zeros((4, obs_dim), dtype=np.float32)
     actions = policy.act(obs)
     assert actions.shape == (4, 4)
+

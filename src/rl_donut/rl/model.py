@@ -89,3 +89,4 @@ class ActorCritic(nn.Module):
         value = self.critic(x)
 
         return action, log_prob, entropy, value
+

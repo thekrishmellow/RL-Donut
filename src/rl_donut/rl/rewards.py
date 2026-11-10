@@ -82,3 +82,4 @@ def compute_reward(
 
     total_reward = (sparse + alpha * shaping).astype(np.float32)
     return total_reward
+

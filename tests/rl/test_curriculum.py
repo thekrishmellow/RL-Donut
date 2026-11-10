@@ -14,3 +14,4 @@ def test_curriculum_manager_stages():
     passed, win_rate = cm.evaluate_gate(bot, n_matches=2)
     assert isinstance(passed, bool)
     assert 0.0 <= win_rate <= 1.0
+

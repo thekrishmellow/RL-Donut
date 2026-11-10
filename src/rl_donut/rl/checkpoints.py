@@ -60,3 +60,4 @@ class CheckpointManager:
         ckpt = torch.load(path, map_location="cpu")
         model.load_state_dict(ckpt["model_state"])
         return ckpt
+

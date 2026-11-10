@@ -70,3 +70,4 @@ class CurriculumManager:
         if passed and not self.is_curriculum_complete:
             self.current_stage_idx += 1
         return passed, report.win_rate
+

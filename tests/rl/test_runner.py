@@ -35,3 +35,4 @@ def test_runner_executes_rollout_and_updates():
     metrics2 = runner.step_rollout()
     assert metrics2.loss_policy is not None
     assert runner.global_step == 32 * 2
+

@@ -26,11 +26,11 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | **5.6** | **done** | Logging, exploit watchlist, checkpoint manager |
 | **5.7** | **done** | Curriculum (static target → random bot → pits) |
 | **5.8** | **done** | Evaluation against fixed bots (`scripts/eval_bots.py`, `evaluate.py`) |
-| **6.1** | next | Checkpoint snapshot pool (`rl_donut.rl.pool`) |
-| **6.2** | planned | Opponent sampling (PFSP + latest self + bots) |
-| **6.3** | planned | Offline Elo round-robin (`rl_donut.rl.elo`) |
-| **6.4** | planned | 1v1 self-play training run |
-| **6.5** | planned | 2v2 cooperative-competitive training |
+| **6.1** | **done** | Checkpoint snapshot pool (`rl_donut.rl.pool`) |
+| **6.2** | **done** | Opponent sampling (PFSP + latest self + bots) |
+| **6.3** | **done** | Offline Elo round-robin (`rl_donut.rl.elo`, `scripts/elo_round_robin.py`) |
+| **6.4** | **done** | 1v1 self-play training run (`scripts/train_selfplay.py`) |
+| **6.5** | **done** | 2v2 cooperative-competitive training (`rl_donut.rl.mappo`) |
 | **6.6** | planned | Final format evaluation (1v1 vs 2v2) |
 
 ---
@@ -56,6 +56,11 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | R15 | Curriculum progression | Stage 1 (static target, 90% win), Stage 2 (random bot no pits, 80%), Stage 3 (random bot with pits, 75%) | Progressively introduces targeting, moving targets, and fall hazard navigation before self-play. Turret/Rusher gates run after Phase 4 merge. |
 | R16 | Pit curriculum filtering | Filter frozen maps on `len(m.pits) == 0` | Avoids regenerating maps and preserves exact frozen seed splits committed in `data/maps/`. |
 | R17 | Evaluation protocol | Half-split side swapping on held-out `val` seeds with 95% Wilson intervals | Guarantees zero side bias and reports statistically rigorous confidence intervals on benchmark win rates. |
+| S1 | Snapshot pool admission | Win rate $\ge 55\%$ vs latest snapshot over evaluation matches | Prevents inferior or degenerate policy versions from polluting the opponent pool. |
+| S2 | Pool capacity & pruning | Max 30 snapshots; prune oldest non-permanent snapshots | Enforces disk budget while maintaining diverse historical play styles. |
+| S3 | Opponent sampling | 50% latest self, 30% PFSP historical pool, 20% permanent bots | 50% latest pushes the frontier; 30% PFSP prevents catastrophic forgetting of hard styles; 20% bots prevents strategy cycling. |
+| S4 | Elo anchoring | Anchor `RandomBot` at 1200.0 | Guarantees Elo ratings are comparable and grounded across independent training runs. |
+| S5 | 2v2 Team rewards | $0.5 \times \text{own} + 0.5 \times \text{team\_avg}$ | Balances individual combat responsibility with team victory. |
 
 ---
 
@@ -245,3 +250,27 @@ Command-line tool for evaluating trained checkpoints:
 python scripts/eval_bots.py --checkpoint runs/<id>/ckpt_0050.pt --opponent static --n-matches 20
 ```
 Outputs detailed combat and survival metrics with statistical confidence intervals.
+
+
+---
+
+## Phase 6: Self-Play, Opponent Pool, Elo & 2v2
+
+### Opponent Pool & PFSP (`pool.py`)
+- Maintains up to 30 policy snapshots plus permanent benchmark bots (`StaticTargetBot`, `RandomBot`).
+- **Admission Gate**: Candidates are evaluated against the current latest snapshot over 16 evaluation matches. A candidate must achieve $\ge 55\%$ win rate to be admitted.
+- **Prioritized Fictitious Self-Play (PFSP)**:
+  - 50% chance of sampling latest self (frontier exploration).
+  - 30% chance of sampling an older snapshot from the pool, weighted by $(1 - w_i)^2$ where $w_i$ is the learner's win rate against snapshot $i$.
+  - 20% chance of sampling a fixed baseline bot (anchoring).
+
+### Elo Rating System (`elo.py`, `scripts/elo_round_robin.py`)
+- Logistic Elo rating model with iterative Bradley-Terry refinement over tournament matrices.
+- Anchored to `RandomBot` at fixed rating $1200.0$ so ratings are comparable across training runs.
+- Runs offline round-robin tournaments on held-out `val` maps with side-swapping.
+- Outputs structured ratings report to `runs/<id>/elo.json`.
+
+### 2v2 Multi-Agent PPO (`mappo.py`)
+- **Centralized Critic**: Evaluates global environment state (`env.get_state()`) across all agents.
+- **Team Reward Blending**: Blends individual agent performance with team average ($0.5 \times \text{own} + 0.5 \times \text{team\_avg}$).
+- **Parameter Sharing**: Teammates share the actor policy network while conditioning on their specific agent observation slot.

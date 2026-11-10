@@ -209,3 +209,4 @@ class PPOTrainer:
         self.model.load_state_dict(ckpt["model_state"])
         self.optimizer.load_state_dict(ckpt["optimizer_state"])
         return ckpt.get("extra_meta", {})
+
