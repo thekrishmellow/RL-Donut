@@ -63,6 +63,19 @@ Guide: [`docs/interface.md`](docs/interface.md).
 7. Full environment speed benchmark — done
 8. PettingZoo wrapper — done
 
+### Phase 4 steps
+
+Guide: [`docs/bots.md`](docs/bots.md).
+
+1. Policy interface, match harness, random and static-target bots — done
+2. Bot perception helpers
+3. Turret bot
+4. Rusher bot
+5. Bot ladder and difficulty calibration
+6. Replay format, writer and reader
+7. Renderer
+8. Merge preparation with Team B
+
 ## Decisions
 
 | # | Decision | Choice | Why |
@@ -169,6 +182,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 | I17 | Physics randomization | Per match, one factor multiplies both gravity and thrust, drawn uniformly from `PhysicsConfig.scale_range` (default (1, 1) = off, allowed [0.5, 1.5]); hidden from observations; its own random stream | Level flight depends only on thrust ÷ gravity, so tying them keeps it at 30.0 tiles (climb 33.8–36.3); independent ±15% gives 22 tiles, below the generator's 24. Hidden keeps spec 0.3 and makes policies robust; off by default because it slows early learning |
 | I18 | Env speed and batching | `scripts/bench_env.py` (full step, per-part shares, `--state`, `--processes`), no timing test; no speed-up now; one process, 256 matches per batch in 1v1 and 128 in 2v2 | Measured 35,000 (1v1) and 20,400 (2v2) match steps/s at 256 matches; visibility is 45% of it. The env costs about as much as a PPO update per sample, so doubling it gains at most 1.5×. If Phase 5 shows the env is the bottleneck: corner rays only when the centre is hidden, then numba, then more processes (2 nearly double the rate) |
 | I19 | PettingZoo wrapper | `RLDonutParallelEnv` (`ParallelEnv`, one match) in `rl_donut.env.pettingzoo_env`; `pettingzoo==1.27.0`, `gymnasium==1.4.0` pinned, imported only there; Dict action space (MultiDiscrete + aim Box); pluggable `reward_fn`, default kills − deaths as a placeholder; truncated at the timer, never terminated; `state()` = team A's `get_state` | Named in the brief, for outside tools; passes PettingZoo's own API and seed tests. One match runs about 700 steps/s against 35,000 batched, so training stays on `MatchEnv`. Rewards belong to Phase 5, so the default is only a placeholder |
+| B1 | Policy interface | `Policy.act(obs, ctx) -> (discrete, continuous)` and `PolicyContext(env, slots, rng)` in `rl_donut.env.policy`; stateful bots notice new matches through `world.episode` (no reset method); `play_matches(env, team_a, team_b)` plays one match per slot, sides swapped by the caller; `RandomBot` and `StaticTargetBot` in `rl_donut.env.bots` | One home both teams import, in the shape Team B already uses; no protocol change for Team B's callers. Team B's `evaluate_policy` stays the official evaluation, so the harness stays small. Random bots draw 100% of 1v1 matches, so beating one means getting kills |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

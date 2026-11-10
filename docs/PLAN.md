@@ -65,7 +65,7 @@ tooling, `M` map generator; later phases add their own letters).
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
 | 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | done (steps 1–8) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | done (steps 1–8) |
-| 4 | Scripted bots, renderer, replay files | — | planned |
+| 4 | Scripted bots, renderer, replay files | — | in progress (step 1 of 8) |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
 | 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | planned |
 | 7 | Adaptive opponents, style policies | 9 | planned |
@@ -215,7 +215,10 @@ Still open:
   and 20,400 in 2v2 at 256 matches in one process. No speed-up until Phase 5 shows the env
   is the bottleneck.
 
-### Phase 4 — Bots, renderer, replays (draft)
+### Phase 4 — Bots, renderer, replays (in progress, [`bots.md`](bots.md))
+
+- **Policy interface (approved, B1):** `rl_donut.env.policy` (`Policy`, `PolicyContext`,
+  `play_matches`); random and static-target bots in `rl_donut.env.bots`.
 
 - Scripted bots: random, static target, turret (aims and shoots from cover), rusher
   (chases and shoots). These are the fixed yardstick that self-play Elo can't inflate.

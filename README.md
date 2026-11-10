@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) complete: action space, visibility, observations, the batched `MatchEnv`, the shared contract test, gravity/thrust randomization, the speed benchmark and a PettingZoo wrapper.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) complete: action space, visibility, observations, the batched `MatchEnv`, the shared contract test, gravity/thrust randomization, the speed benchmark and a PettingZoo wrapper. Phase 4 (bots, replays, renderer) in progress: the policy interface and simple bots done.
 
 ## Documentation
 
@@ -15,6 +15,7 @@ self-play, and are evaluated on maps they have never seen.
 | [`docs/mapgen.md`](docs/mapgen.md) | How the map generator works, step by step, with code and the reasoning behind it |
 | [`docs/engine.md`](docs/engine.md) | How the game engine works, step by step, and the promises it keeps to the map generator |
 | [`docs/interface.md`](docs/interface.md) | The RL interface: actions, observations, the batched environment, with the measurements behind each choice |
+| [`docs/bots.md`](docs/bots.md) | Phase 4: the policy interface, scripted bots, replays and the renderer |
 | [`docs/handoff_phase5_6.md`](docs/handoff_phase5_6.md) | For the teammate building Phases 5–6: what exists, the interface contract, every step and decision, the merge checklist |
 
 ## Setup
@@ -64,6 +65,7 @@ RL-Donut/
 ├── docs/mapgen.md             Map generator guide
 ├── docs/engine.md             Game engine guide
 ├── docs/interface.md          RL interface guide
+├── docs/bots.md               Bots, replays and renderer guide
 ├── docs/handoff_phase5_6.md   Phases 5–6 handoff: contract, steps, merge plan
 ├── requirements.txt           Pinned dependencies
 ├── pyproject.toml             Package + pytest config
@@ -75,6 +77,8 @@ RL-Donut/
 │   │   ├── observe.py         Observations: 57 named numbers + tile window, memory, team B mirrored
 │   │   ├── match_env.py       MatchEnv: the batched RL environment (auto-reset, episode stats, critic state)
 │   │   ├── pettingzoo_env.py  PettingZoo ParallelEnv over one match, for outside tools
+│   │   ├── policy.py          Policy interface shared by learners and bots; play_matches harness
+│   │   ├── bots.py            Scripted bots
 │   │   ├── config.py          EngineConfig and its parts: physics, rifle, life, match settings
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
@@ -118,5 +122,5 @@ RL-Donut/
 └── outputs/                   Generated images and logs (git-ignored)
 ```
 
-Later phases will add bots, the renderer and replays to `src/rl_donut/env/`, plus
+Later phases will add the remaining bots, the renderer and replays to `src/rl_donut/env/`, plus
 `src/rl_donut/rl/` (PPO and self-play), `src/rl_donut/eval/` and `dashboard/`.
