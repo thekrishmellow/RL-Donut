@@ -21,8 +21,8 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | **5.1** | **done** | Tools, PyTorch pin, and Team B guide (`docs/rl.md`) |
 | **5.2** | **done** | Stand-in environment (`StandInEnv`) and contract test (`tests/test_env_contract.py`) |
 | **5.3** | **done** | Reward function and shaping (`rl_donut.rl.rewards`) |
-| **5.4** | next | PPO implementation (`rl_donut.rl.ppo`) |
-| **5.5** | planned | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
+| **5.4** | **done** | PPO implementation (`rl_donut.rl.ppo`) |
+| **5.5** | next | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
 | **5.6** | planned | Logging, exploit watchlist, checkpoint manager |
 | **5.7** | planned | Curriculum (static target → turret → rusher → pits) |
 | **5.8** | planned | Evaluation against fixed bots (`scripts/eval_bots.py`) |
@@ -46,6 +46,9 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | R5 | Shaping weights & scale | Kill +0.3, death -0.3, dmg ±0.003, step penalty -0.0005 | Keeps dense shaping over an entire match bounded around ±1.0, properly balancing the sparse ±1.0 win/loss signal. |
 | R6 | Shaping schedule | Linear decay of $\alpha$ from 1.0 to 0.1 over the first 60% of training | Promotes dense reward-driven exploration early while transitioning to pure win/loss optimization as policies mature. |
 | R7 | Fall penalty | Suicide / falling into a pit incurs an extra -0.3 penalty | Teaches fuel preservation and pit avoidance early before combat competence develops. |
+| R8 | Actor-Critic architecture | $2 \times 256$ MLP, orthogonal init (gain $\sqrt{2}$, actor heads 0.01), categorical heads | Separate value backbone prevents policy updates from destabilizing value baselines; independent action heads factorize MultiDiscrete action space cleanly. |
+| R9 | GAE & PPO parameters | $\gamma=0.99, \lambda=0.95$, clip $\epsilon=0.2$, normalized advantages, value clipping | Standard CleanRL-style hyperparameter set with proven stability on continuous/discrete hybrid control tasks. |
+| R10 | Value bootstrapping | Use `final_obs` on time-limit truncation | Match time limits are environment truncations, not agent terminations; bootstrapping from $V(\text{final\_obs})$ removes truncation bias. |
 
 ---
 
@@ -138,3 +141,27 @@ $$r_t = r_{\text{sparse}} + \alpha \cdot r_{\text{shaping}}$$
    - Fall penalty: $-0.3$ when agent dies by falling into a bottom pit.
 3. **Annealing ($\alpha$)**:
    - $\alpha$ decays linearly from $1.0$ down to $0.1$ over the first 60% of training steps.
+
+
+---
+
+## Step 5.4: PPO Implementation
+
+### Multi-Head Actor-Critic Architecture (`model.py`)
+- **Backbone**: Separate 2-layer MLPs ($2 \times 256$) for actor and critic with $\tanh$ activations.
+- **Actor Heads**: Dedicated linear heads for each dimension in `action_nvec`:
+  - Move: 3 classes (left, none, right)
+  - Jetpack: 2 classes (off, on)
+  - Aim: 16 classes (discrete direction bins)
+  - Shoot: 2 classes (no, yes)
+- **Log Probability**: $\log \pi(a|s) = \sum_{i} \log \pi_i(a_i|s)$
+- **Entropy Bonus**: $H(\pi) = \sum_{i} H(\pi_i)$
+
+### Optimization Core (`ppo.py`)
+- CleanRL-style rollout buffer processing.
+- Generalized Advantage Estimation ($\text{GAE}(\gamma=0.99, \lambda=0.95)$).
+- Advantage normalization per minibatch.
+- Clipped surrogate policy objective ($L^{\text{CLIP}}$) with $\epsilon = 0.2$.
+- Clipped value function objective ($L^{\text{VF}}$).
+- Gradient clipping with maximum norm $0.5$.
+- Model checkpoint saving and loading with full metadata and architecture tracking.
