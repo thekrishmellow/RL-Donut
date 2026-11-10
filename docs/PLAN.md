@@ -64,7 +64,7 @@ tooling, `M` map generator; later phases add their own letters).
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
 | 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | done (steps 1–8) |
-| 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
+| 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | done (steps 1–8) |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
 | 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | planned |
@@ -132,7 +132,7 @@ Rules that keep the pieces independent:
 | Fastest motion < 1 tile per tick, so 1-tile walls can't be skipped | M16 | engine test | approved |
 | Hitscan uses `mapgen.geometry.line_of_sight`, so "can't see" = "can't be shot" | M40 | engine | approved |
 | Scripted bot reaches ≥ 99% of random route targets | M4b | engine test | approved, passes (99.80%, P14) |
-| Env API: `reset(seed)`, `step(actions: dict[agent_id, ndarray])` in PettingZoo parallel form, `get_state()` | — | RL, replays | draft |
+| Env API: batched `MatchEnv` (`reset()`, `step(discrete, continuous)`, `get_state()`, spec 0.3) for training; PettingZoo `ParallelEnv` over one match for outside tools | I12–I19 | RL, replays | approved, built |
 | Replay file `.json.gz`: `{seed, config, map, ticks: [{agents, shots, events}]}` | — | dashboard | draft |
 | Metrics: `runs/<id>/metrics.jsonl` (optionally mirrored to an experiment tracker) | — | dashboard | draft |
 | Checkpoint: `runs/<id>/ckpt_<update>.pt` with weights, observation statistics, config, git commit | — | eval, pool | draft |
@@ -286,7 +286,7 @@ Still open:
 | Tests | pytest 9.2 | approved | Standard; golden-value and drift tests |
 | Charts and previews | matplotlib 3.11, scripts only | approved (E2) | Never imported by library code |
 | Deep learning | PyTorch | draft (Phase 5) | Named in the brief; alternative JAX is faster on accelerators but adds friction on a Mac |
-| Multi-agent API | PettingZoo `ParallelEnv` (+ Gymnasium spaces) | draft (Phase 3) | Named in the brief; standard multi-agent interface |
+| Multi-agent API | PettingZoo 1.27 `ParallelEnv` + Gymnasium 1.4 spaces, for outside tools | approved (I19) | Named in the brief; standard multi-agent interface. Training uses the batched `MatchEnv` |
 | Rendering | Pygame or matplotlib-based | open (Phase 4) | Only for viewing; the engine stays headless |
 | Experiment tracking | Local `metrics.jsonl`; optionally Weights & Biases or TensorBoard | open (Phase 5) | Local files keep the dashboard offline-capable |
 | Dashboard | Streamlit suggested | open (Phase 9) | Fastest to build; alternative FastAPI + a web front end is more flexible but slower to build |

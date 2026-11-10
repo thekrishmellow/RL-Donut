@@ -44,6 +44,7 @@ What changed, and what it means for the files on `phase5-6`:
 | Events | `stand_in.Events`, float32 damage | `rl_donut.env.MatchEvents`: same fields plus logs (`shot_log`, `death_log`, `respawn_log`); damage is float64; the contract checks kinds, not widths | `rewards.py`: cast to float32 as it already does at the end |
 | Episode stats (I14) | computed by the watchlist from the world | `info[m]["agents"]` holds per-agent totals (section 4.4); hover is airborne with vertical speed under **1** tile/s | `watchlist.py`: read `info` (its own hover rule uses 2 tiles/s) |
 | Engine rules (P19–P25) | stand-in's minimal health and timer | real health (100, regeneration after 3 s), respawn after 2 s at a spawn no enemy sees, 1 s protection ended by firing, simultaneous hits, pit falls credited to the last damager within 3 s, 60 s deathmatch | none; rewards built on events keep working |
+| PettingZoo wrapper (I19) | not on the branch | `rl_donut.env.pettingzoo_env.RLDonutParallelEnv`: one match, for outside tools; `requirements.txt` pins `pettingzoo==1.27.0` and `gymnasium==1.4.0` | keep both pins next to `torch==2.14.1` when merging `requirements.txt`; optionally pass Phase 5's reward as `reward_fn` |
 | Speed (I18) | stand-in | full `MatchEnv.step` in one process: 35,000 match steps/s in 1v1 and 20,400 in 2v2 at 256 matches (16,400 / 11,500 at 64); `scripts/bench_env.py` | use 256 matches per batch in 1v1 and 128 in 2v2 rather than 16–64; report PPO samples/s with machine load, which decides whether the env needs speeding up |
 
 Two scope notes:
@@ -142,7 +143,7 @@ agent almost no signal; shaping and the curriculum must carry early learning.
 | Time to kill | 7 hits ≈ 1.2 s at full fire rate (approved) | Fights are short compared with episodes |
 | Health | 100, regenerates 10/s after 3 s without damage (approved, P20) | Retreating is a real tactic |
 | Respawn | 2 s, at a random own spawn no living enemy can see; 1 s protection, ended by firing (approved, P21–P22) | Spawn camping is hard |
-| Engine speed | ~73,700 match decision steps/s (1v1) and ~55,200 (2v2) at 64 matches, one process (P28) | Before observations and the network; Phase 3 measures the full environment |
+| Engine speed | ~73,700 match decision steps/s (1v1) and ~55,200 (2v2) at 64 matches, one process (P28) | Before observations and the network; the full environment is 35,000 (1v1) and 20,400 (2v2) at 256 matches (I18) |
 
 ### Tooling
 

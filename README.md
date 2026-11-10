@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) in progress: action space, visibility, observations, the batched `MatchEnv`, the shared contract test, gravity/thrust randomization and the speed benchmark done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) complete: action space, visibility, observations, the batched `MatchEnv`, the shared contract test, gravity/thrust randomization, the speed benchmark and a PettingZoo wrapper.
 
 ## Documentation
 
@@ -74,6 +74,7 @@ RL-Donut/
 │   │   ├── visibility.py      Who sees whom: centre or hitbox corners in sight, team sight
 │   │   ├── observe.py         Observations: 57 named numbers + tile window, memory, team B mirrored
 │   │   ├── match_env.py       MatchEnv: the batched RL environment (auto-reset, episode stats, critic state)
+│   │   ├── pettingzoo_env.py  PettingZoo ParallelEnv over one match, for outside tools
 │   │   ├── config.py          EngineConfig and its parts: physics, rifle, life, match settings
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
@@ -117,5 +118,5 @@ RL-Donut/
 └── outputs/                   Generated images and logs (git-ignored)
 ```
 
-Later phases will add the PettingZoo wrapper to `src/rl_donut/env/`, plus
+Later phases will add bots, the renderer and replays to `src/rl_donut/env/`, plus
 `src/rl_donut/rl/` (PPO and self-play), `src/rl_donut/eval/` and `dashboard/`.

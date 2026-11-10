@@ -15,7 +15,7 @@ in [`DESIGN.md`](../DESIGN.md) with `I` IDs.
 | 5 | Shared contract test | done |
 | 6 | Gravity and thrust randomization | done |
 | 7 | Full environment speed benchmark | done |
-| 8 | PettingZoo wrapper | — |
+| 8 | PettingZoo wrapper | done |
 
 ## Step 1 — Action space
 
@@ -409,3 +409,55 @@ hours. Phase 5 measures the real figure with PyTorch.
 - **One process** (Team B's R12) with **256 matches per batch in 1v1 and 128 in 2v2**: past
   the Python-overhead range, steps stay under about 10 ms, and a 128-step rollout is 65,536
   samples in 1v1. Multiple env processes only if Phase 5 shows the env is the bottleneck.
+
+## Step 8 — PettingZoo wrapper (`pettingzoo_env.py`)
+
+[PettingZoo](https://pettingzoo.farama.org) is the standard Python interface for multi-agent
+RL, as Gymnasium is for single-agent. It has two styles: AEC, where agents act in turn (like
+chess), and Parallel, where all act at once. This game is simultaneous, so
+`RLDonutParallelEnv` is a `ParallelEnv`: `reset(seed)` returns observations and infos, and
+`step(actions)` returns observations, rewards, `terminated`, `truncated` and infos, each a
+dict keyed by agent name. Spaces come from Gymnasium.
+
+It exists for outside tools (the brief names PettingZoo; demos, other libraries,
+PettingZoo's own checkers), not training: it runs one match with per-agent dicts, about 700
+match steps/s in 1v1 and 640 in 2v2, within 3% of a bare one-match `MatchEnv`, against
+35,000 for the batched env at 256 matches.
+
+```python
+from rl_donut.env.pettingzoo_env import RLDonutParallelEnv
+
+env = RLDonutParallelEnv(team_size=2, split="val")
+obs, infos = env.reset(seed=0)                        # {"a_0": (330,) float32, "a_1": ..., "b_0": ..., "b_1": ...}
+while env.agents:
+    actions = {agent: env.action_space(agent).sample() for agent in env.agents}
+    obs, rewards, terminated, truncated, infos = env.step(actions)
+infos["a_0"]   # {"map_seed", "team", "score": (own, enemy), "outcome": +1/0/-1, "stats": {...}}
+```
+
+**Choices (I19):**
+- **Dependency:** `pettingzoo==1.27.0` and `gymnasium==1.4.0` (the latest releases, Python
+  3.10–3.14) pinned in `requirements.txt`; they bring `cloudpickle`, `farama-notifications`
+  and `typing_extensions` (about 40 MB) and keep numpy at 2.5.4. Only this module imports
+  them; `rl_donut.env` doesn't, and a test checks that.
+- **Actions:** `Dict{"discrete": MultiDiscrete([3, 2, 2]), "aim": Box(−π, π, (1,))}`, in each
+  agent's own frame (team B mirrored back, as `MatchEnv`).
+- **Observations:** `Box(330,)` float32, unbounded (values stay within about ±3.5, but no
+  hard limit is promised), in each agent's own frame.
+- **Rewards:** `reward_fn(events)` gets the step's `MatchEvents` (a batch of one match) and
+  returns one reward per agent. The default, `kills_minus_deaths`, is a placeholder until
+  Phase 5's reward design (pit falls credited as in the score).
+- **Episodes:** one match is one episode. At the timer every agent is truncated; none is
+  ever terminated, because deaths respawn. The final infos give score and outcome from each
+  agent's side, plus its episode stats (`MatchEnv`'s section 4.4 stats).
+- **Seeds and maps:** `reset(seed=s)` restarts the map deck and random streams, so the same
+  seed and actions repeat exactly; `reset()` without a seed plays the next map, the one
+  `MatchEnv` already started when the last match ended, so no map is skipped.
+- **State:** `state()` is team A's view of `get_state()` (50 numbers), not limited by sight.
+- No rendering until the Phase 4 renderer.
+
+**Tests** (`tests/test_pettingzoo_env.py`): PettingZoo's `parallel_api_test` (1v1 and 2v2,
+warnings as errors) and `parallel_seed_test`; names, spaces and state; observations and
+rewards equal `MatchEnv`'s for the same seed and actions; everyone is truncated at the timer
+with mirrored score and outcome; reset without a seed follows the deck; custom `reward_fn`;
+bad actions refused; importing `rl_donut.env` loads neither PettingZoo nor Gymnasium.
