@@ -59,7 +59,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 3. Observations: 57 named numbers + 21 × 13 tile grid, mirrored for team B — done
 4. Batched `MatchEnv` (auto-reset, events, episode stats, per-team state) — done
 5. Shared contract test (spec 0.3) and Team B migration notes — done
-6. Gravity and thrust randomization
+6. Gravity and thrust randomization: one factor scales both, off by default — done
 7. Full environment speed benchmark
 8. PettingZoo wrapper
 
@@ -132,7 +132,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 | P8 | Physics constants | Gravity 25, thrust 40 (tiles/s²); rising limit 12 and falling limit 20 tiles/s; run 6 tiles/s; tank 100, drain 32/s, refill 25/s while standing and not thrusting | Simulated: without a rising limit a full tank reaches 38 tiles/s (1.27 tiles per tick, breaks M16); the draft's drain of 40/s gave 24.4 tiles of level flight against the generator's 24. Chosen numbers climb 35.7 tiles and fly 30 tiles level |
 | P9 | Horizontal control | Speed set directly to ±run speed, on the ground and in the air; no momentum | Mini Militia feel; easier to learn; exactly predictable for the route check |
 | P10 | Update rule | Semi-implicit Euler: speed, then position | Stable and deterministic at a fixed timestep |
-| P11 | Engine contract tests | Climb ≥ climb_budget; level flight ≥ 1.2 × 2 × climb_budget; every speed limit < 1 tile per tick (enforced by config); no jump, no fall damage | Requires real margin over the generator's model, not a tie; gravity/thrust randomization (Phase 3) must keep these at its extremes, which ±15% on both does not (22 tiles of level flight) |
+| P11 | Engine contract tests | Climb ≥ climb_budget; level flight ≥ 1.2 × 2 × climb_budget; every speed limit < 1 tile per tick (enforced by config); no jump, no fall damage | Requires real margin over the generator's model, not a tie; gravity/thrust randomization (Phase 3) must keep these at its extremes, which ±15% on both does not (22 tiles of level flight); I17 scales them together instead |
 | P12 | Route planner | Rebuild the generator's own cheapest flight (`mapgen.reach` costs) hop by hop, preferring falls when tracing back from the landing; replan after every landing | Tests the generator's claim itself rather than whatever a cleverer search finds; a search over real physics would pass maps the model got wrong. Preferring falls avoids flights that end a fall in mid-air, whose braking the model doesn't charge |
 | P13 | Route controller | Aim at the end of each straight run of boxes; thrust by stopping distance; on the ground, stand still (no walking, no thrust) until the tank holds the hop's fuel | Walking while refuelling stepped bots off ledges with 2–15 fuel: it caused most falls and the looping timeouts (98.55% → 99.80%) |
 | P14 | Route check rule | 2,000 routes on 200 val maps (`scripts/route_check.py`), 150 on 30 maps in the tests; 60 s per route, pits included; full tank before each hop; ≥ 99% must arrive | Full tank tests whether every flight the generator promised fits in one tank. Result 99.80%; the 3 falls are 21–24-unit hops (tank 24) with 20+ tiles of sideways flight, 1 timeout loops. Just-enough fuel: 99.45% |
@@ -166,6 +166,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 | I14 | Episode stats | Per agent: kills, deaths, falls, damage dealt / taken, shots, hits, seconds airborne and hovering (vertical speed < 1 tile/s), mean distance to nearest visible enemy when firing, kills within 8 tiles of an enemy spawn | Raw material for the exploit watchlist; checked against summed step events |
 | I15 | Episode timing | All matches in a batch start and end together | Staggering needs a shorter first match or a fake clock that distorts "time left"; bursts of stats are harmless |
 | I16 | Contract test | `tests/test_env_contract.py` on `main` for spec 0.3, built from Team B's version, run over a `FACTORIES` list; `SPECS` pins each version's sizes, stat names and observation-name fingerprint; event dtypes checked by kind | Team B's branch was built on the first draft contract; one test both sides run keeps the interface honest, and the pinned layout forces a version bump on change. The handoff guide's section 0 lists Team B's required edits; their branch is not touched |
+| I17 | Physics randomization | Per match, one factor multiplies both gravity and thrust, drawn uniformly from `PhysicsConfig.scale_range` (default (1, 1) = off, allowed [0.5, 1.5]); hidden from observations; its own random stream | Level flight depends only on thrust ÷ gravity, so tying them keeps it at 30.0 tiles (climb 33.8–36.3); independent ±15% gives 22 tiles, below the generator's 24. Hidden keeps spec 0.3 and makes policies robust; off by default because it slows early learning |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

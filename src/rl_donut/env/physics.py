@@ -23,7 +23,7 @@ def physics_tick(world: World, move_dir: np.ndarray, jet: np.ndarray) -> None:
     thrusting = jet & alive & (world.fuel > 0)
 
     world.vx[...] = np.where(alive, move_dir * p.run_speed, 0.0)
-    accel = p.gravity - p.thrust * thrusting
+    accel = (p.gravity - p.thrust * thrusting) * world.physics_scale[:, None]
     world.vy[...] = np.where(alive, np.clip(world.vy + accel * dt, -p.max_rise_speed, p.max_fall_speed), 0.0)
     move(world, dt)
 

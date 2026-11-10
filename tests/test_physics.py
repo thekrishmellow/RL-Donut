@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from rl_donut.env import EngineConfig, PhysicsConfig, World, on_ground, overlaps_rock, physics_tick
+from rl_donut.env.config import MAX_SCALE, MIN_SCALE
 from rl_donut.mapgen import load_split
 
 CFG = EngineConfig()
@@ -84,6 +85,52 @@ def test_draft_drain_rate_would_leave_no_margin(maps):
     cfg = EngineConfig(physics=PhysicsConfig(fuel_drain=40.0))
     distance, _ = level_flight(maps, cfg)
     assert 2 * CFG.map.climb_budget <= distance < 1.2 * 2 * CFG.map.climb_budget
+
+
+def scaled(k):
+    return EngineConfig(physics=PhysicsConfig(scale_range=(k, k)))
+
+
+@pytest.mark.parametrize("k", [MIN_SCALE, 0.85, 1.15, MAX_SCALE])
+def test_generator_contracts_hold_across_the_physics_scale_range(maps, k):
+    """Scaling gravity and thrust together keeps the thrust duty cycle of level flight, so
+    the tank lasts as long; climbing stays far above the climb budget."""
+    assert climb_height(maps, scaled(k)) >= CFG.map.climb_budget
+    distance, error = level_flight(maps, scaled(k))
+    assert distance >= 1.2 * 2 * CFG.map.climb_budget
+    assert error < 0.5
+
+
+def test_physics_scale_multiplies_gravity_and_thrust(maps):
+    for jet, accel in ((False, P.gravity), (True, P.gravity - P.thrust)):
+        world = open_room(maps, scaled(1.2))
+        world.y[0, 0] = 20.0
+        physics_tick(world, *controls(jet=jet))
+        assert world.vy[0, 0] == pytest.approx(1.2 * accel * CFG.dt)
+
+
+def test_physics_scale_is_drawn_per_match_and_episode(maps):
+    cfg = EngineConfig(physics=PhysicsConfig(scale_range=(0.85, 1.15)))
+    world = World.from_maps(maps, cfg)
+    first = world.physics_scale.copy()
+    assert ((first >= 0.85) & (first <= 1.15)).all() and len(np.unique(first)) == len(maps)
+    world.reset()
+    assert not np.array_equal(world.physics_scale, first)
+    assert np.array_equal(World.from_maps(maps, cfg).physics_scale, first)
+    assert (World.from_maps(maps).physics_scale == 1.0).all()
+
+
+def test_physics_scale_leaves_rifle_spread_unchanged(maps):
+    plain = World.from_maps(maps[:5])
+    varied = World.from_maps(maps[:5], EngineConfig(physics=PhysicsConfig(scale_range=(0.85, 1.15))))
+    for a, b in zip(plain.rngs, varied.rngs):
+        assert a.random() == b.random()
+
+
+@pytest.mark.parametrize("bad", [(1.1, 0.9), (0.4, 1.0), (1.0, 1.6)])
+def test_invalid_scale_range_rejected(bad):
+    with pytest.raises(ValueError):
+        PhysicsConfig(scale_range=bad)
 
 
 def test_speed_limits_must_stay_under_a_tile_per_tick():

@@ -2,6 +2,9 @@ from dataclasses import dataclass, field
 
 from rl_donut.mapgen import MapConfig
 
+# Physics scales the engine is tested at; outside them the climb and speed contracts are unchecked.
+MIN_SCALE, MAX_SCALE = 0.5, 1.5
+
 
 @dataclass(frozen=True)
 class PhysicsConfig:
@@ -19,8 +22,15 @@ class PhysicsConfig:
     fuel_capacity: float = 100.0
     fuel_drain: float = 32.0
     fuel_refill: float = 25.0
+    # Each match multiplies gravity and thrust by one factor drawn uniformly from this
+    # range. Scaling both together keeps level flight per tank unchanged, so maps stay
+    # crossable; (1, 1) turns it off.
+    scale_range: tuple[float, float] = (1.0, 1.0)
 
     def __post_init__(self):
+        lo, hi = self.scale_range
+        if not MIN_SCALE <= lo <= hi <= MAX_SCALE:
+            raise ValueError(f"scale_range must satisfy {MIN_SCALE} <= low <= high <= {MAX_SCALE}")
         if min(self.gravity, self.thrust, self.max_rise_speed, self.max_fall_speed, self.run_speed) <= 0:
             raise ValueError("accelerations and speeds must be positive")
         if self.thrust <= self.gravity:

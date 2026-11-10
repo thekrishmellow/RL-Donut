@@ -13,7 +13,7 @@ in [`DESIGN.md`](../DESIGN.md) with `I` IDs.
 | 3 | Observations | done |
 | 4 | Batched `MatchEnv` | done |
 | 5 | Shared contract test | done |
-| 6 | Gravity and thrust randomization | — |
+| 6 | Gravity and thrust randomization | done |
 | 7 | Full environment speed benchmark | — |
 | 8 | PettingZoo wrapper | — |
 
@@ -315,3 +315,52 @@ own observations), because the branch started before Phase 3. The spec 0.3 test 
 every check from Team B's version and adds the new ones. Section 0 of
 [`handoff_phase5_6.md`](handoff_phase5_6.md) lists what changed since that branch started,
 and the edits Team B's code needs.
+
+## Step 6 — Gravity and thrust randomization
+
+Varying physics between matches stops a policy from leaning on exact timings, and gives
+Phase 8 physics shifts to evaluate on. The catch is the map generator: it accepted every
+map assuming one tank climbs 12 tiles and flies 24 tiles level (P11, with 20% spare: 28.8).
+
+Holding height means firing the jetpack a fixed share of the time, gravity ÷ thrust, so level
+flight depends only on their ratio. Measured on one tank (tiles):
+
+| Gravity \ thrust | ×0.85 | ×0.95 | ×1.0 | ×1.05 | ×1.15 |
+|---|---|---|---|---|---|
+| ×0.85 | 30.0 | 33.6 | 35.2 | 36.8 | 40.4 |
+| ×1.0 | 25.6 | 28.4 | 30.0 | 31.6 | 34.4 |
+| ×1.15 | 22.0 | 24.8 | 26.4 | 27.2 | 30.0 |
+
+Independent ±15% (the draft) falls to 22 tiles and makes some accepted gaps uncrossable;
+even ±5% each loses the 20% spare. Climbing stays at 26 tiles or more everywhere.
+
+**Choice (I17): one factor per match multiplies both gravity and thrust.**
+`PhysicsConfig.scale_range = (low, high)` draws it uniformly at each reset; the default
+`(1, 1)` turns it off, and the trainer turns it on when it wants, e.g. `(0.85, 1.15)`.
+Allowed values lie in `[0.5, 1.5]`, the range the tests cover:
+
+| Factor | 0.5 | 0.7 | 0.85 | 1.0 | 1.15 | 1.3 | 1.5 |
+|---|---|---|---|---|---|---|---|
+| Climb (tiles, ≥ 12) | 33.8 | 34.9 | 35.3 | 35.7 | 35.9 | 36.1 | 36.3 |
+| Level flight (tiles, ≥ 28.8) | 30.0 | 30.0 | 30.0 | 30.0 | 30.0 | 30.0 | 30.0 |
+
+Speed limits don't scale, so the tile-per-tick rule holds too. What the factor changes is how
+heavy the game feels: a 10-tile fall takes 0.97 s at 0.85 and 0.83 s at 1.15 (0.89 s
+normally), and reaching full rising speed takes 0.94 s against 0.70 s (0.8 s normally).
+
+- **Hidden from agents.** The factor isn't in the observations, so the spec stays 0.3. A
+  policy must play well across the range; fuel endurance and the hover rhythm don't change,
+  so its plans still work. Physics shifts in Phase 8 then don't feed the network inputs it
+  never saw.
+- **Off by default.** Randomization usually slows early learning, so it is a training
+  choice (for example a late curriculum stage), not part of the environment.
+- **Its own random stream.** Each match draws the factor from `(rng_seed, map seed,
+  episode, 1)`, so turning it on leaves rifle spread unchanged. `World.physics_scale` holds
+  each match's factor.
+- Scripted route-following (`navigation.py`) plans with the nominal physics.
+
+**Tests** (`tests/test_physics.py`, `tests/test_match_env.py`): climb and level-flight
+contracts at 0.5, 0.85, 1.15 and 1.5; the factor multiplies both accelerations; draws differ
+per match and per episode, repeat for the same seed, and are 1 by default; rifle spread is
+unchanged; bad ranges are refused; a batched run at 0.85–1.15 never enters rock and redraws
+the factor at auto-reset.

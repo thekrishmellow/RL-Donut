@@ -185,7 +185,7 @@ Still open:
 - How a pit fall is rewarded (G4, Phase 5); the match score already credits the last
   damager within 3 s (P25).
 - Gravity and thrust randomization (Phase 3): ±15% on both drops level flight to 22 tiles,
-  below the generator's 24, so the ranges must be narrowed or tied together.
+  below the generator's 24. Resolved in Phase 3 step 6 (I17): one factor scales both.
 
 ### Phase 3 — RL interface (draft)
 
@@ -209,6 +209,8 @@ Still open:
 - **Batched env (approved, I12–I15):** `rl_donut.env.MatchEnv` with auto-reset from a
   shuffled map deck, episode stats for the watchlist, and `get_state()` per team for a
   centralized critic.
+- **Physics randomization (approved, I17):** one factor per match scales gravity and thrust
+  together (level flight stays 30 tiles); off by default, hidden from agents.
 - **Speed benchmark:** environment steps per second, measured before any training. The
   target depends on the compute decision below.
 
@@ -366,7 +368,6 @@ merge, the main one being a Gaussian head for the continuous aim.
 |---|---|---|
 | Final format: 1v1, 2v2 or both | Phase 6 | G3 |
 | Grenades in v1 or v2 | Phase 2 | Draft says v2 |
-| Gravity and thrust randomization ranges | Phase 3 | Must keep the climb and level-flight contracts (P11) |
 | Kill credit for falls | Phase 5 | G4 |
 | PyTorch, PettingZoo, renderer, tracker, dashboard tool | Their phases | Section 6 |
 | Compute targets (environments, steps/s) | Phase 3 | Section 7 |

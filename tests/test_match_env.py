@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from rl_donut.env import DISCRETE_NVEC, OBS_DIM
+from rl_donut.env import DISCRETE_NVEC, OBS_DIM, EngineConfig, MatchConfig, PhysicsConfig, overlaps_rock
 from rl_donut.env.match_env import STATE_DIM, STATS, MapDeck, MatchEnv
 from rl_donut.env.observe import FEATURE_NAMES
 from rl_donut.mapgen import load_split
@@ -111,6 +111,20 @@ def test_same_seed_same_run_and_different_seed_differs(maps):
     (a, sa), (b, sb), (c, sc) = run(1), run(1), run(2)
     np.testing.assert_array_equal(a, b)
     assert (sa == sb).all() and not ((sa == sc).all() and np.array_equal(a, c))
+
+
+def test_physics_scale_redrawn_each_match_and_play_stays_in_air(maps):
+    physics = PhysicsConfig(scale_range=(0.85, 1.15))
+    cfg = EngineConfig(team_size=2, physics=physics, match=MatchConfig(duration=10.0))
+    env = MatchEnv(8, team_size=2, maps=maps, cfg=cfg)
+    rng = np.random.default_rng(0)
+    env.reset()
+    first = env.world.physics_scale.copy()
+    for _ in range(150):
+        r = env.step(*aggressive_actions(env, rng))
+        assert not overlaps_rock(env.world).any()
+    assert r.done.all() and not np.array_equal(env.world.physics_scale, first)
+    assert ((env.world.physics_scale >= 0.85) & (env.world.physics_scale <= 1.15)).all()
 
 
 def test_same_action_on_both_sides_keeps_the_match_mirrored(maps):

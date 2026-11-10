@@ -48,8 +48,10 @@ What changed, and what it means for the files on `phase5-6`:
 
 Two scope notes:
 - Phases 7 and 8 on `phase5-6` go beyond the agreed Phases 5–6. They are welcome, but they
-  are reviewed together after the merge. Phase 8's "OOD physics shifts" depends on Phase 3
-  step 6 (gravity and thrust randomization ranges), which isn't decided yet.
+  are reviewed together after the merge. Phase 8's "OOD physics shifts" should use Phase 3
+  step 6 (I17): `PhysicsConfig(scale_range=(k, k))` runs every match at factor `k` on both
+  gravity and thrust (allowed 0.5–1.5). Shifting them independently breaks the map
+  generator's level-flight promise beyond about 4% in thrust ÷ gravity.
 - Every result on `phase5-6` (curriculum gates, evaluation, Elo) comes from the stand-in, so
   it is a pipeline check, not a result, until re-run on `MatchEnv` (merge checklist, item 7).
 
@@ -619,7 +621,6 @@ and updates the contract test in the same commit.
 
 | Question | Owner | Notes |
 |---|---|---|
-| Gravity and thrust randomization | Team A, Phase 3 | ±15% on both breaks the generator's level-flight assumption (22 tiles vs 24); ranges must be narrowed or tied |
 | Compute targets (environments, steps/s) | both, Phase 3 | The laptop is busy; report machine and load with timings |
 | Kill credit for falls (G4) | Team B, Phase 5 | Step 5.3 |
 | Final format (G3) | both, Phase 6 | Step 6.6 |

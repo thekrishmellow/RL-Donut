@@ -83,8 +83,10 @@ class World:
     last_damager: np.ndarray  # (M, A) agent that last damaged this one, -1 = none since respawn
     respawn: np.ndarray     # (M, A) ticks until a dead agent respawns; 0 with alive False = out of play
     protection: np.ndarray  # (M, A) ticks of spawn protection left
+    physics_scale: np.ndarray  # (M,) gravity and thrust multiplier of each match
     # Random numbers (rifle spread) come from one stream per match, seeded from
     # (rng_seed, map seed, episode), so a match never depends on the rest of its batch.
+    # The physics scale has its own stream so turning it on leaves spread unchanged.
     rng_seed: int = 0
     episode: np.ndarray = field(default=None)   # (M,) episode number of each match, from 0
     rngs: list = field(default_factory=list)    # (M,) numpy Generators
@@ -106,7 +108,7 @@ class World:
             cooldown=np.zeros((n, k), dtype=np.int64), reload=np.zeros((n, k), dtype=np.int64),
             health=np.zeros((n, k)), since_damage=np.zeros((n, k), dtype=np.int64),
             last_damager=np.zeros((n, k), dtype=np.int64), respawn=np.zeros((n, k), dtype=np.int64),
-            protection=np.zeros((n, k), dtype=np.int64),
+            protection=np.zeros((n, k), dtype=np.int64), physics_scale=np.ones(n),
             rng_seed=rng_seed, episode=np.full(n, -1, dtype=np.int64), rngs=[None] * n,
         )
         world.reset()
@@ -154,9 +156,12 @@ class World:
         self.respawn[matches] = self.protection[matches] = 0
         self.tick[matches] = 0
         self.score[matches] = 0
+        lo, hi = self.cfg.physics.scale_range
         for m in matches:
             self.episode[m] += 1
-            self.rngs[m] = np.random.default_rng([self.rng_seed, int(self.seeds[m]), int(self.episode[m])])
+            key = [self.rng_seed, int(self.seeds[m]), int(self.episode[m])]
+            self.rngs[m] = np.random.default_rng(key)
+            self.physics_scale[m] = lo if lo == hi else np.random.default_rng(key + [1]).uniform(lo, hi)
 
     def agent(self, match: int, agent: int) -> AgentView:
         return AgentView(match, agent, int(self.team[agent]), float(self.x[match, agent]),

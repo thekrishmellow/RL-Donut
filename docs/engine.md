@@ -274,10 +274,10 @@ far above the 12 the generator needs; a skilled agent simply learns to pulse.
 
 ### For Phase 3: randomizing gravity and thrust
 
-The plan varies gravity and thrust by ±15% between matches. At the worst corner (gravity
-+15%, thrust −15%) level flight drops to 22 tiles, below the generator's 24. Those ranges
-must be narrowed, or gravity and thrust varied together, and the contract tests must run
-at the extremes.
+The draft varied gravity and thrust by ±15% each, independently. At the worst corner (gravity
++15%, thrust −15%) level flight drops to 22 tiles, below the generator's 24. Phase 3 step 6
+(I17) instead multiplies both by one factor per match, which keeps level flight at 30.0 tiles
+for any factor; see [`interface.md`](interface.md#step-6--gravity-and-thrust-randomization).
 
 **Picture:** `scripts/preview_physics.py` plots one tank's flight paths in an empty room
 against the generator's needs.
