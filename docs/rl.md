@@ -61,6 +61,9 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | S3 | Opponent sampling | 50% latest self, 30% PFSP historical pool, 20% permanent bots | 50% latest pushes the frontier; 30% PFSP prevents catastrophic forgetting of hard styles; 20% bots prevents strategy cycling. |
 | S4 | Elo anchoring | Anchor `RandomBot` at 1200.0 | Guarantees Elo ratings are comparable and grounded across independent training runs. |
 | S5 | 2v2 Team rewards | $0.5 \times \text{own} + 0.5 \times \text{team\_avg}$ | Balances individual combat responsibility with team victory. |
+| T1 | Combat style archetypes | Aggressive ($2\times$ dmg dealt), Defensive ($2\times$ dmg taken penalty), Sniper (bonus for $>15$ tiles) | Prevents strategy cycling and creates specialized agents for pool diversity. |
+| T2 | Adaptive matchmaking | Dynamically shifts selection bias $b \in [-1, 1]$ based on rolling 20-match win rate | Keeps learner win rate within optimal 50%–60% zone to maximize sample efficiency. |
+| T3 | CLI integration | Parameterized via `--style` and `--adaptive` in `scripts/train_selfplay.py` | Allows launching styled self-play runs with zero code modification. |
 
 ---
 
@@ -274,3 +277,20 @@ Outputs detailed combat and survival metrics with statistical confidence interva
 - **Centralized Critic**: Evaluates global environment state (`env.get_state()`) across all agents.
 - **Team Reward Blending**: Blends individual agent performance with team average ($0.5 \times \text{own} + 0.5 \times \text{team\_avg}$).
 - **Parameter Sharing**: Teammates share the actor policy network while conditioning on their specific agent observation slot.
+
+
+---
+
+## Phase 7: Adaptive Opponents and Combat Styles
+
+### Behavioral Archetypes (`styles.py`)
+Defines specialized asymmetric reward configurations to diversify the opponent pool and prevent rock-paper-scissors strategy cycling:
+- **`AGGRESSIVE`**: $2\times$ damage dealt bonus ($+0.006$), higher kill bonus ($+0.5$), $2\times$ step penalty ($-0.0010$) to force proactive engagement and pursuit.
+- **`DEFENSIVE`**: $2\times$ damage taken penalty ($-0.006$), higher death penalty ($-0.5$), minimal step penalty ($-0.0002$) to encourage patient spacing, cover utilization, and retreat.
+- **`SNIPER`**: Flat bonus ($+0.004$) for landed shots exceeding 15 tiles distance, fostering long-range rifle precision and vertical control.
+
+### Dynamic Adaptive Matchmaking (`adaptive.py`)
+- **Target Win Rate Zone**: Actively regulates training difficulty so the learner maintains a 50%–60% win rate.
+- **Difficulty Bias ($b \in [-1, +1]$)**: When the learner dominates ($>60\%$), bias increases towards sampling the latest self snapshot ($p_{\text{latest}} \to 0.80$). When struggling ($<50\%$), bias shifts towards baseline bots ($p_{\text{bots}} \to 0.50$).
+- Integrated via `--adaptive` in `scripts/train_selfplay.py`.
+

@@ -14,6 +14,7 @@ import time
 import numpy as np
 import torch
 
+from rl_donut.rl.adaptive import AdaptiveConfig, AdaptiveMatchmaker
 from rl_donut.rl.checkpoints import CheckpointManager
 from rl_donut.rl.elo import run_round_robin
 from rl_donut.rl.model import ActorCritic
@@ -21,6 +22,7 @@ from rl_donut.rl.pool import OpponentPool
 from rl_donut.rl.ppo import LearnedPolicy, PPOConfig, PPOTrainer
 from rl_donut.rl.runner import Runner
 from rl_donut.rl.stand_in import SPEC_VERSION, StandInEnv
+from rl_donut.rl.styles import CombatStyle, STYLE_CONFIGS
 from rl_donut.rl.watchlist import WatchlistTracker
 
 
@@ -33,6 +35,8 @@ def parse_args():
     parser.add_argument("--n-steps", type=int, default=128, help="Rollout steps per update")
     parser.add_argument("--total-updates", type=int, default=50, help="Total updates")
     parser.add_argument("--snapshot-interval", type=int, default=25, help="Snapshot evaluation interval")
+    parser.add_argument("--style", type=str, default="balanced", choices=["balanced", "aggressive", "defensive", "sniper"], help="Combat behavioral style")
+    parser.add_argument("--adaptive", action="store_true", help="Enable adaptive matchmaking (maintains 50-60%% win rate)")
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Master seed")
     parser.add_argument("--out-dir", type=str, default="runs", help="Output directory")
@@ -72,7 +76,11 @@ def main():
     pool.consider_admission(initial_policy, update=0)
 
     total_decision_steps = args.total_updates * args.n_steps * (args.n_matches * args.team_size)
-    current_opponent = pool.sample_opponent()
+    
+    style = CombatStyle(args.style)
+    style_cfg = STYLE_CONFIGS[style]
+    matchmaker = AdaptiveMatchmaker(pool) if args.adaptive else None
+    current_opponent = matchmaker.select_opponent() if matchmaker else pool.sample_opponent()
 
     runner = Runner(
         env=env,
@@ -80,6 +88,7 @@ def main():
         opponent=current_opponent,
         trainer=trainer,
         n_steps=args.n_steps,
+        weights=style_cfg.weights,
         total_training_steps=total_decision_steps,
         device=device,
     )
@@ -95,6 +104,8 @@ def main():
         "n_steps": args.n_steps,
         "total_updates": args.total_updates,
         "snapshot_interval": args.snapshot_interval,
+        "style": args.style,
+        "adaptive": args.adaptive,
         "created_at": datetime.now().isoformat(),
     }
     with open(run_dir / "config.json", "w") as f:
@@ -104,13 +115,21 @@ def main():
     start_time = time.time()
 
     for update in range(1, args.total_updates + 1):
-        # Sample opponent from pool (50% latest self, 30% PFSP historical, 20% bots)
-        opponent = pool.sample_opponent()
+        # Sample opponent (adaptive or PFSP standard)
+        if matchmaker is not None:
+            opponent = matchmaker.select_opponent()
+        else:
+            opponent = pool.sample_opponent()
         runner.opponent = opponent
 
         m = runner.step_rollout()
         wall_time = time.time() - start_time
         env_steps = runner.global_step
+
+        if matchmaker is not None:
+            won = m.mean_return > 0.0
+            lost = m.mean_return < 0.0
+            matchmaker.record_match_outcome(won=won, lost=lost)
 
         record = {
             "update": update,
