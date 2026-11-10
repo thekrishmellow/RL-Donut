@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): steps 1–2 of 8 done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): steps 1–3 of 8 done.
 
 ## Documentation
 
@@ -36,6 +36,7 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/preview_noise.py --seed 42            # noise settings sheet -> outputs/noise_preview.png
 .venv/bin/python scripts/build_maps.py --split val --workers 8 # (re)build a split -> data/maps/ (resumable)
 .venv/bin/python scripts/preview_world.py --count 4            # engine worlds: agents and spawns -> outputs/world_preview.png (--trace N: random-motion paths)
+.venv/bin/python scripts/preview_physics.py                    # one tank's flight paths vs the generator's needs -> outputs/physics_preview.png
 ```
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
@@ -54,9 +55,10 @@ RL-Donut/
 ├── pyproject.toml             Package + pytest config
 ├── src/rl_donut/
 │   ├── env/                   Phase 2: game engine (many matches per batch)
-│   │   ├── config.py          EngineConfig: team size, tick rate, hitbox
+│   │   ├── config.py          EngineConfig and PhysicsConfig: team size, tick rate, hitbox, physics constants
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
-│   │   └── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
+│   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
+│   │   └── physics.py         One tick: controls, gravity, jetpack, speed limits, fuel
 │   └── mapgen/                Phase 1: procedural maps
 │       ├── seeding.py         Master seed -> independent named random streams
 │       ├── generator.py       Pipeline entry point: generate_map(seed) -> GeneratedMap
@@ -77,6 +79,7 @@ RL-Donut/
 │   ├── build_maps.py          Generate a whole split in parallel and write its stats report
 │   ├── preview_maps.py
 │   ├── preview_world.py
+│   ├── preview_physics.py
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
 ├── map_cache/                 Resumable build chunks (git-ignored)

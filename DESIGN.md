@@ -43,8 +43,8 @@ Each step ends with a test or picture; its decisions are discussed when it start
 
 1. World and state model — done
 2. Tile collision — done
-3. Movement, jetpack and fuel (climb and < 1 tile per tick contracts) — next
-4. Route check: a scripted bot flies generator routes on many seeds (M4b), before shooting,
+3. Movement, jetpack and fuel (climb and < 1 tile per tick contracts) — done
+4. Route check — next: a scripted bot flies generator routes on many seeds (M4b), before shooting,
    because a failure here changes the generator
 5. Aiming and hitscan rifle (uses `geometry.line_of_sight`, M40)
 6. Health, death and respawn
@@ -117,6 +117,10 @@ Each step ends with a test or picture; its decisions are discussed when it start
 | P5 | Standing | Feet on a tile edge (within 1e-6) with rock under the hitbox, computed from position | Correct right after reset or respawn and when standing still; a "fall was blocked" flag would not be |
 | P6 | Outside the map | Left, right and top solid; below the bottom edge is air | Matches the border (M16); the bottom border is solid except at pits, so pits are the only way down |
 | P7 | Agent-agent collision | None; agents pass through each other | As in Mini Militia; solid bodies would allow doorway blocking and pushing into pits |
+| P8 | Physics constants | Gravity 25, thrust 40 (tiles/s²); rising limit 12 and falling limit 20 tiles/s; run 6 tiles/s; tank 100, drain 32/s, refill 25/s while standing and not thrusting | Simulated: without a rising limit a full tank reaches 38 tiles/s (1.27 tiles per tick, breaks M16); the draft's drain of 40/s gave 24.4 tiles of level flight against the generator's 24. Chosen numbers climb 35.7 tiles and fly 30 tiles level |
+| P9 | Horizontal control | Speed set directly to ±run speed, on the ground and in the air; no momentum | Mini Militia feel; easier to learn; exactly predictable for the route check |
+| P10 | Update rule | Semi-implicit Euler: speed, then position | Stable and deterministic at a fixed timestep |
+| P11 | Engine contract tests | Climb ≥ climb_budget; level flight ≥ 1.2 × 2 × climb_budget; every speed limit < 1 tile per tick (enforced by config); no jump, no fall damage | Requires real margin over the generator's model, not a tie; gravity/thrust randomization (Phase 3) must keep these at its extremes, which ±15% on both does not (22 tiles of level flight) |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

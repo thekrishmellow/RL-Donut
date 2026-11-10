@@ -35,6 +35,7 @@ class AgentView:
     y: float
     vx: float
     vy: float
+    fuel: float
     alive: bool
 
 
@@ -51,6 +52,7 @@ class World:
     y: np.ndarray
     vx: np.ndarray
     vy: np.ndarray
+    fuel: np.ndarray        # (M, A) jetpack fuel units
     alive: np.ndarray       # (M, A) bool
 
     @classmethod
@@ -73,7 +75,7 @@ class World:
             tick=np.zeros(n, dtype=np.int64),
             team=np.repeat([TEAM_A, TEAM_B], cfg.team_size),
             x=np.zeros((n, k)), y=np.zeros((n, k)), vx=np.zeros((n, k)), vy=np.zeros((n, k)),
-            alive=np.ones((n, k), dtype=bool),
+            fuel=np.zeros((n, k)), alive=np.ones((n, k), dtype=bool),
         )
         world.reset()
         return world
@@ -96,10 +98,12 @@ class World:
         start = self.spawns[matches[:, None], self.team[None, :], slot[None, :]]
         self.x[matches], self.y[matches] = start[..., 0], start[..., 1]
         self.vx[matches] = self.vy[matches] = 0.0
+        self.fuel[matches] = self.cfg.physics.fuel_capacity
         self.alive[matches] = True
         self.tick[matches] = 0
 
     def agent(self, match: int, agent: int) -> AgentView:
         return AgentView(match, agent, int(self.team[agent]), float(self.x[match, agent]),
                          float(self.y[match, agent]), float(self.vx[match, agent]),
-                         float(self.vy[match, agent]), bool(self.alive[match, agent]))
+                         float(self.vy[match, agent]), float(self.fuel[match, agent]),
+                         bool(self.alive[match, agent]))

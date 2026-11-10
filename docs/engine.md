@@ -25,8 +25,8 @@ The map generator assumed these when it decided which maps are valid. Each one b
 |---|---|---|
 | 1. World and state model | done | `src/rl_donut/env/config.py`, `src/rl_donut/env/state.py` |
 | 2. Tile collision | done | `src/rl_donut/env/collision.py` |
-| 3. Movement, jetpack and fuel | next | — |
-| 4. Route check | planned | — |
+| 3. Movement, jetpack and fuel | done | `src/rl_donut/env/physics.py`, `src/rl_donut/env/config.py` |
+| 4. Route check | next | — |
 | 5. Aiming and hitscan rifle | planned | — |
 | 6. Health, death and respawn | planned | — |
 | 7. Match loop | planned | — |
@@ -101,9 +101,8 @@ step 6.
 | `team_size` | 1 | Agents per team (1v1 or 2v2); at most the map's 6 spawns per team |
 | `tick_rate` | 30 | Physics ticks per second of game time |
 | `hitbox_w`, `hitbox_h` | 0.8, 1.6 | Agent size in tiles; must fit inside the generator's 2 × 3 clearance box |
+| `physics` | `PhysicsConfig()` | Movement constants (step 3) |
 | `map` | `MapConfig()` | The generator settings the maps were built with |
-
-Physics constants are added in step 3, when they are decided.
 
 **Picture:** `scripts/preview_world.py` draws the tiles, spawn points and agents.
 
@@ -204,3 +203,95 @@ slide along walls.
   (and agents really do hit floors, walls and ceilings: about 12,000 contacts per run);
 - a move is blocked exactly when the unblocked target would overlap rock, compared with
   the brute-force check over more than 10,000 moves.
+
+---
+
+## Step 3: Movement, jetpack and fuel (`physics.py`)
+
+`physics_tick(world, move_dir, jet)` advances every match by one tick. `move_dir` is
+−1, 0 or 1 (left, none, right) and `jet` fires the jetpack, both per agent.
+
+### What the engine owes the generator
+
+The generator judged maps with a simple fuel model (M27): climbing costs 2 units per tile,
+sideways flight 1, falling nothing, from a tank of 2 × `climb_budget` = 24 units. So a full
+tank must manage **12 tiles straight up** and **24 tiles of level flight**, and nothing may
+move a tile or more per tick (M16).
+
+### Choosing the constants
+
+We simulated the draft numbers tick by tick (agent deciding every 2 ticks):
+
+| Option | Climb on one tank | Fastest | Tiles per tick | Level flight |
+|---|---|---|---|---|
+| Draft (no rising limit) | 77 tiles | 38 tiles/s | 1.27: **passes through walls** | 24.4 tiles |
+| Draft + rising limit 12 tiles/s | 28.5 | 12 | 0.40 | 24.4: **only 2% spare** |
+| Rising limit 12 + drain 32/s (chosen) | 35.7 | 12 | 0.40 | 30.0: 25% spare |
+
+- **Rising needs a speed limit.** Without one, a full tank reaches 38 tiles/s and climbs
+  77 tiles, more than the whole 48-tile map.
+- **Level flight was the real weak spot.** Holding height takes thrust 62.5% of the time
+  (gravity 25 ÷ thrust 40), so at the draft's 40 units/s a tank lasts exactly 4 s, or 24
+  tiles at running speed: the generator's assumption with nothing to spare. A learning
+  agent switching the jetpack 15 times a second would fail gaps the generator accepted.
+  Draining 32 units/s gives 30 tiles.
+
+| Setting (`PhysicsConfig`) | Value |
+|---|---|
+| `gravity` | 25 tiles/s² |
+| `thrust` | 40 tiles/s² (net 15 upward) |
+| `max_rise_speed` | 12 tiles/s |
+| `max_fall_speed` | 20 tiles/s (0.67 tiles per tick) |
+| `run_speed` | 6 tiles/s, on the ground and in the air |
+| `fuel_capacity` | 100 units |
+| `fuel_drain` | 32 units/s while thrusting |
+| `fuel_refill` | 25 units/s while standing and not thrusting (4 s from empty) |
+
+`EngineConfig` refuses any speed limit of a tile per tick or more, and `PhysicsConfig`
+refuses thrust that can't beat gravity.
+
+### How a tick works
+
+1. Horizontal speed is **set directly** from `move_dir` × `run_speed`, with no momentum. This
+   is Mini Militia's feel, easier for RL to learn, and exactly predictable for the route
+   check. Acceleration with friction was the alternative.
+2. Vertical speed gains gravity, minus thrust if the jetpack fires and the tank isn't
+   empty, then is clipped to the rising and falling limits.
+3. Positions move by the new speeds through collision (step 2). Updating speed before
+   position is **semi-implicit Euler**, the standard game rule: stable, and identical for
+   the same inputs.
+4. Fuel drains while thrusting and refills while standing without thrusting.
+
+There is no jump and no fall damage, as in Mini Militia: the jetpack is the only way up,
+and falling only kills through pits.
+
+### A quirk: pulsing climbs higher
+
+At the rising limit, extra thrust can't add speed but still burns fuel. So pulsing the
+jetpack (3 decisions on, 1 off) climbs about 39 tiles, against 36 at full thrust. Both are
+far above the 12 the generator needs; a skilled agent simply learns to pulse.
+
+### For Phase 3: randomizing gravity and thrust
+
+The plan varies gravity and thrust by ±15% between matches. At the worst corner (gravity
++15%, thrust −15%) level flight drops to 22 tiles, below the generator's 24. Those ranges
+must be narrowed, or gravity and thrust varied together, and the contract tests must run
+at the extremes.
+
+**Picture:** `scripts/preview_physics.py` plots one tank's flight paths in an empty room
+against the generator's needs.
+
+**Tests** (`tests/test_physics.py`):
+
+- **contracts:** climb ≥ 12 tiles (35.7); level flight ≥ 1.2 × 24 tiles (30.0, holding
+  height within 0.14 tiles); the draft's 40/s drain would leave less than 20% spare;
+  speed limits of a tile per tick or more are refused;
+- invalid physics settings are rejected;
+- rising and falling speeds stop exactly at their limits;
+- horizontal speed is set directly on the ground and in the air;
+- fuel drains at 32/s, an empty tank gives no thrust, and fuel refills only while standing
+  (full after 4 s);
+- standing still stays exactly on the floor; dead agents ignore controls;
+- 900 ticks of random play with 2 agents per team on 40 val maps never enter rock, never
+  exceed a tile per tick and keep fuel in range;
+- the same controls give the same trajectory, bit for bit.

@@ -62,7 +62,7 @@ tooling, `M` map generator; later phases add their own letters).
 |---|---|---|---|
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
-| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–2 done, step 3 next) |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–3 done, step 4 next) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
@@ -157,32 +157,30 @@ Steps (approved; listed in `DESIGN.md`): 1 world and state model, 2 tile collisi
 and respawn, 7 match loop, 8 debug viewer and speed check. The route check comes before
 shooting because a failure there would change the generator and force a rebuild of every map.
 
-| Area | Draft |
-|---|---|
-| World | 96 × 48 tile grid, 1 tile = 1 world unit; solid outside the map except below pits |
-| Timing | 30 physics ticks per second; agent decides every 2 ticks (15 decisions/s); 60 s matches |
-| Body | Hitbox 0.8 × 1.6 tiles; axis-aligned box collision against tiles; no physics library |
-| Movement | Run 6 tiles/s; gravity 25 tiles/s²; jetpack thrust 40 tiles/s² (net 15 up); max fall 20 tiles/s |
-| Fuel | 100; drains 40/s flying, refills 25/s on the ground |
-| Rifle | Hitscan; 15 damage; 0.2 s between shots; ±2° spread; 30-round magazine, 1.5 s auto-reload, unlimited reserve; 30-tile range |
-| Health | 100; regenerates 10/s after 3 s without damage (on, per G2) |
-| Match | Timed deathmatch with respawns: 2 s respawn at a spawn out of enemy sight, 1 s protection; most kills wins, equal is a draw |
-| Out of scope for v1 | Grenades (first v2 addition), pickups, weapon switching, melee, zoom, dual wield |
+| Area | Status | Design |
+|---|---|---|
+| World | approved (P1–P3, P6) | 96 × 48 tile grid, 1 tile = 1 world unit; many matches per batch; solid outside the map except below the bottom edge |
+| Timing | draft | 30 physics ticks per second; agent decides every 2 ticks (15 decisions/s); 60 s matches |
+| Body and collision | approved (P4, P5, P7) | Hitbox 0.8 × 1.6 tiles; one axis at a time against tiles; agents pass through each other |
+| Movement | approved (P8–P10) | Run 6 tiles/s (set directly); gravity 25 tiles/s²; thrust 40 tiles/s²; rising limit 12, falling limit 20 tiles/s |
+| Fuel | approved (P8) | 100; drains 32/s while thrusting, refills 25/s while standing |
+| Rifle | draft | Hitscan; 15 damage; 0.2 s between shots; ±2° spread; 30-round magazine, 1.5 s auto-reload, unlimited reserve; 30-tile range |
+| Health | draft | 100; regenerates 10/s after 3 s without damage (on, per G2) |
+| Match | draft | Timed deathmatch with respawns: 2 s respawn at a spawn out of enemy sight, 1 s protection; most kills wins, equal is a draw |
+| Out of scope for v1 | draft | Grenades (first v2 addition), pickups, weapon switching, melee, zoom, dual wield |
 
 Required tests, from Phase 1 contracts: climb at least `climb_budget` on one tank; motion
 < 1 tile per tick; scripted route check on many seeds; hitscan agrees with line of sight.
 
-Open questions for the Phase 2 discussion:
+Resolved so far: the draft had no rising-speed limit (1.27 tiles per tick, breaking M16)
+and left level flight only 2% above the generator's assumption; fixed by P8. Climb and
+level-flight contracts pass with 35.7 and 30.0 tiles.
 
-- **The draft breaks the wall contract.** It caps falling speed but not rising speed. A
-  full tank gives 2.5 s of thrust at a net 15 tiles/s², reaching 37.5 tiles/s, which is
-  1.25 tiles per tick, over the 1-tile limit (M16). Phase 2 needs an upward speed cap (or
-  different constants).
-- Whether the draft physics satisfies the climb contract, and how much spare it has.
-- Collision resolution order.
-- How falling through a pit is scored.
-- How domain randomization (gravity and thrust ±15%) is applied without breaking either
-  contract.
+Still open:
+
+- How falling through a pit is scored (G4, Phase 5).
+- Gravity and thrust randomization (Phase 3): ±15% on both drops level flight to 22 tiles,
+  below the generator's 24, so the ranges must be narrowed or tied together.
 
 ### Phase 3 — RL interface (draft)
 
@@ -346,7 +344,7 @@ contracts in section 4 exist so each area can be built against them independentl
 |---|---|---|
 | Final format: 1v1, 2v2 or both | Phase 6 | G3 |
 | Grenades in v1 or v2 | Phase 2 | Draft says v2 |
-| Physics constants and the climb contract | Phase 2 | Draft numbers above |
+| Gravity and thrust randomization ranges | Phase 3 | Must keep the climb and level-flight contracts (P11) |
 | Kill credit for falls | Phase 5 | G4 |
 | PyTorch, PettingZoo, renderer, tracker, dashboard tool | Their phases | Section 6 |
 | Compute targets (environments, steps/s) | Phase 3 | Section 7 |
