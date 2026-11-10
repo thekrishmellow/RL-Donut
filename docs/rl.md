@@ -22,7 +22,8 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | **5.2** | **done** | Stand-in environment (`StandInEnv`) and contract test (`tests/test_env_contract.py`) |
 | **5.3** | **done** | Reward function and shaping (`rl_donut.rl.rewards`) |
 | **5.4** | **done** | PPO implementation (`rl_donut.rl.ppo`) |
-| **5.5** | next | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
+| **5.5** | **done** | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
+| **5.6** | next | Logging, exploit watchlist, checkpoint manager |
 | **5.6** | planned | Logging, exploit watchlist, checkpoint manager |
 | **5.7** | planned | Curriculum (static target → turret → rusher → pits) |
 | **5.8** | planned | Evaluation against fixed bots (`scripts/eval_bots.py`) |
@@ -49,6 +50,8 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | R8 | Actor-Critic architecture | $2 \times 256$ MLP, orthogonal init (gain $\sqrt{2}$, actor heads 0.01), categorical heads | Separate value backbone prevents policy updates from destabilizing value baselines; independent action heads factorize MultiDiscrete action space cleanly. |
 | R9 | GAE & PPO parameters | $\gamma=0.99, \lambda=0.95$, clip $\epsilon=0.2$, normalized advantages, value clipping | Standard CleanRL-style hyperparameter set with proven stability on continuous/discrete hybrid control tasks. |
 | R10 | Value bootstrapping | Use `final_obs` on time-limit truncation | Match time limits are environment truncations, not agent terminations; bootstrapping from $V(\text{final\_obs})$ removes truncation bias. |
+| R11 | Opponent batching | Call `Policy.act()` once for all opponent slots in the batch | Minimizes Python function call overhead and leverages batched array operations for bots. |
+| R12 | Single-process rollout | Batched numpy rollouts in the main training process | Eliminates IPC serialization overhead and worker synchronization bottlenecks on loaded multi-core machines. |
 
 ---
 
@@ -165,3 +168,21 @@ $$r_t = r_{\text{sparse}} + \alpha \cdot r_{\text{shaping}}$$
 - Clipped value function objective ($L^{\text{VF}}$).
 - Gradient clipping with maximum norm $0.5$.
 - Model checkpoint saving and loading with full metadata and architecture tracking.
+
+
+---
+
+## Step 5.5: Training Runner & Opponent Coordination
+
+### Runner Architecture (`runner.py`)
+- Coordinates the learner policy vs opponent policy in a unified batched loop.
+- **Side Alternation**: In match $m$, the learner plays Team $m \pmod 2$ and the opponent plays Team $1 - (m \pmod 2)$. This eliminates left/right side bias in the learned policy.
+- Batched rollout collection for $N$ decision steps.
+- GAE computation over completed and truncated trajectories with terminal value bootstrapping.
+- Clean logging of policy loss, value loss, entropy, explained variance, and return curves.
+
+### Training CLI (`scripts/train.py`)
+- Full CLI supporting `--n-matches`, `--n-steps`, `--total-updates`, `--opponent`, `--lr`, `--split`.
+- Emits structured append-only logs in `runs/<id>/metrics.jsonl`.
+- Saves run metadata in `runs/<id>/config.json`.
+- Periodically saves model checkpoints in `runs/<id>/ckpt_<update>.pt`.
