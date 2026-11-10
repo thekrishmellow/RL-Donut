@@ -37,3 +37,4 @@ def test_elo_report_json(tmp_path: Path):
     json_path = tmp_path / "elo.json"
     report.to_json(json_path)
     assert json_path.exists()
+

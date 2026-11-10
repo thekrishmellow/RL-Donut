@@ -37,3 +37,4 @@ def test_pool_pruning_capacity():
     assert len(pool.snapshots) == 3
     names = [s.name for s in pool.snapshots]
     assert names == ["snapshot_0030", "snapshot_0040", "snapshot_0050"]
+

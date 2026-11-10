@@ -25,3 +25,4 @@ def test_blend_team_rewards():
     assert blended[0, 1] == 0.25
     assert blended[0, 2] == 0.50
     assert blended[0, 3] == 0.50
+

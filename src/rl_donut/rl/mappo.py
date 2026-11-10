@@ -40,3 +40,4 @@ def blend_team_rewards(
             blended[m, mask] = (1.0 - team_weight) * rewards[m, mask] + team_weight * team_avg
 
     return blended
+
