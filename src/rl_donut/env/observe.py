@@ -32,6 +32,10 @@ CROP_W, CROP_H = 21, 13
 POSITION_SCALE = 30.0       # rifle range, in tiles
 SCORE_SCALE = 10.0
 BELOW_MAP = -1.0
+# Running moves 0.2 tiles per tick, so positions often sit a rounding error away from a tile
+# edge, and `width - x` rounds differently from x. Tiles are found after this nudge so both
+# sides of a mirror image land in the same tile.
+TILE_NUDGE = 1e-9
 
 SELF_FEATURES = ("map_x", "map_y", "tile_x", "tile_y", "vx", "vy", "on_ground", "fuel", "health", "ammo",
                  "reload", "cooldown", "aim_cos", "aim_sin", "alive", "respawn", "protection",
@@ -111,7 +115,7 @@ class Observer:
         speed_x, speed_y = cfg.physics.run_speed, cfg.physics.max_fall_speed
         hit_recent = self.since_hit < self.memory
         self_part = [
-            mx / W, w.y / H, mx - np.floor(mx), w.y - np.floor(w.y),
+            mx / W, w.y / H, mx - np.floor(mx + TILE_NUDGE), w.y - np.floor(w.y + TILE_NUDGE),
             s * w.vx / speed_x, w.vy / speed_y, on_ground(w),
             w.fuel / cfg.physics.fuel_capacity, w.health / cfg.life.max_health, w.ammo / cfg.rifle.magazine,
             w.reload / cfg.reload_ticks, w.cooldown / cfg.shot_interval_ticks,
@@ -170,9 +174,9 @@ class Observer:
         # image is column W - 1 - c'); flipping a window centred on floor(x) instead would be
         # one column off whenever x is a whole number, as it is on every spawn.
         mx = np.where(self.mirror, W - w.x, w.x)
-        cols = np.floor(mx).astype(np.int64)[..., None, None] + np.arange(CROP_W)[None, :] - CROP_W // 2
+        cols = np.floor(mx + TILE_NUDGE).astype(np.int64)[..., None, None] + np.arange(CROP_W)[None, :] - CROP_W // 2
         cols = np.where(self.mirror[:, None, None], W - 1 - cols, cols) + p
-        rows = np.floor(w.y).astype(np.int64)[..., None, None] + p + np.arange(CROP_H)[:, None] - CROP_H // 2
+        rows = np.floor(w.y + TILE_NUDGE).astype(np.int64)[..., None, None] + p + np.arange(CROP_H)[:, None] - CROP_H // 2
         rows = np.clip(rows, 0, self.tiles.shape[1] - 1)
         cols = np.clip(cols, 0, self.tiles.shape[2] - 1)
         return self.tiles[np.arange(w.n_matches)[:, None, None, None], rows, cols]

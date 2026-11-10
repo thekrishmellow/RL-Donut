@@ -57,7 +57,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 1. Action space: discrete move, jetpack, shoot + continuous aim — done
 2. Visibility: batched exact ray caster, who sees whom, team sight — done
 3. Observations: 57 named numbers + 21 × 13 tile grid, mirrored for team B — done
-4. Batched `MatchEnv` (auto-reset, events, episode stats)
+4. Batched `MatchEnv` (auto-reset, events, episode stats, per-team state) — done
 5. Shared contract test
 6. Gravity and thrust randomization
 7. Full environment speed benchmark
@@ -161,6 +161,10 @@ Guide: [`docs/interface.md`](docs/interface.md).
 | I9 | Unseen enemies | Live details only while the team sees the enemy; otherwise the last-known position and time since seen, forgotten after 10 s; hits give the direction the shot came from | No wallhack, but the memory a player has |
 | I10 | Memory | No frame stacking in the environment | Velocity and the memory features cover it; stacking 4 frames would make 1,300 numbers. The trainer may stack or use an LSTM |
 | I11 | Scaling | Fixed physical scales (30 tiles, run and fall speed, 100 health, 10 kills, full durations); values stay within about ±3.5 | Sensible inputs from the first update; running normalization optional on top |
+| I12 | Next map | A shuffled deck per env seed (after `map_filter`), reshuffled each pass | Every map equally often and reproducible; uniform draws repeat some maps and skip others |
+| I13 | Critic state | `get_state()` → (M, 2, 50): per team in its own frame, 4 agent slots of 12 (own team first) + time left + score difference; not limited by sight | Team B's critic needs team B's frame, like its observations. Contract `spec_version` 0.3 |
+| I14 | Episode stats | Per agent: kills, deaths, falls, damage dealt / taken, shots, hits, seconds airborne and hovering (vertical speed < 1 tile/s), mean distance to nearest visible enemy when firing, kills within 8 tiles of an enemy spawn | Raw material for the exploit watchlist; checked against summed step events |
+| I15 | Episode timing | All matches in a batch start and end together | Staggering needs a shorter first match or a fake clock that distorts "time left"; bursts of stats are harmless |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

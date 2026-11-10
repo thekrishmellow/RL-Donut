@@ -206,6 +206,9 @@ Still open:
   - ally slot (9); match (2): time left, score difference;
   - a 21 × 13 tile window around the agent (rock 1, air 0, below the map −1) instead of rays.
 - **Memory:** no frame stacking in the environment; the trainer may stack or add an LSTM.
+- **Batched env (approved, I12–I15):** `rl_donut.env.MatchEnv` with auto-reset from a
+  shuffled map deck, episode stats for the watchlist, and `get_state()` per team for a
+  centralized critic.
 - **Speed benchmark:** environment steps per second, measured before any training. The
   target depends on the compute decision below.
 

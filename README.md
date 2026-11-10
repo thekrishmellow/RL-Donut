@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) in progress: action space, visibility and observations done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) in progress: action space, visibility, observations and the batched `MatchEnv` done.
 
 ## Documentation
 
@@ -71,6 +71,7 @@ RL-Donut/
 │   │   ├── raycast.py         Thousands of exact lines of sight at once (numpy grid walk)
 │   │   ├── visibility.py      Who sees whom: centre or hitbox corners in sight, team sight
 │   │   ├── observe.py         Observations: 57 named numbers + tile window, memory, team B mirrored
+│   │   ├── match_env.py       MatchEnv: the batched RL environment (auto-reset, episode stats, critic state)
 │   │   ├── config.py          EngineConfig and its parts: physics, rifle, life, match settings
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection

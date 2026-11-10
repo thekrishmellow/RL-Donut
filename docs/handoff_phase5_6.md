@@ -81,6 +81,7 @@ an array of shape (matches, agents), agents ordered team A first (`[A, B]` in 1v
 | Match | `env/match.py` | `match_step(world, move, jet, aim, trigger) -> MatchEvents`: one decision step (2 ticks) for every match; 60 s deathmatch, `World.score`, `done`, `outcome`; `MatchEvents` has exactly the event fields of section 4.2; `World.load_maps` restarts chosen matches on new maps |
 | Actions (Phase 3) | `env/actions.py` | `decode(discrete, continuous) -> Controls` for `match_step`; layout in section 4.1 |
 | Visibility (Phase 3) | `env/visibility.py`, `env/raycast.py` | `visibility(world)`: `own` and `team` (M, A, A) bool, [m, i, j] = i sees enemy j (centre or any hitbox corner in line of sight, any distance; `team` adds living teammates' sightings). `raycast.segments` checks thousands of lines of sight at once, identical to `line_of_sight` |
+| Environment (Phase 3) | `env/match_env.py` | `MatchEnv(n_matches, team_size, split, seed, map_filter, cfg, maps)`: the batched env of section 4.1 with auto-reset (shuffled map deck), episode stats and `get_state()` |
 | Observations (Phase 3) | `env/observe.py` | `Observer(world)`: `observe(vis) -> (M, A, 330)` float32, `record(events)` after each step, `reset(matches)`; layout in section 4.1 |
 
 The engine is complete. Next, Team A's Phase 3 wraps `match_step` with observations into
@@ -186,14 +187,15 @@ class MatchEnv:                      # rl_donut.env.MatchEnv (Team A) / rl_donut
     obs_dim: int                     # length of one agent's observation vector: 330
     action_nvec: tuple[int, ...]     # sizes of the discrete action parts: (3, 2, 2) = move, jetpack, shoot
     action_cont_dim: int             # number of continuous action parts: 1 = aim angle in radians
-    spec_version: str                # "0.2"; bumped whenever observations, actions or events change
+    spec_version: str                # "0.3"; bumped whenever observations, actions, state or events change
+    state_dim: int                   # 50, see get_state
 
     def __init__(self, n_matches: int, team_size: int = 1, split: str = "train",
                  seed: int = 0, map_filter=None, cfg=None): ...
     def reset(self) -> np.ndarray: ...                       # obs (n_matches, n_agents, obs_dim) float32
     def step(self, discrete: np.ndarray, continuous: np.ndarray) -> StepResult: ...
         # discrete (n_matches, n_agents, len(action_nvec)) int64, continuous (n_matches, n_agents, action_cont_dim) float32
-    def get_state(self) -> np.ndarray: ...                   # (n_matches, state_dim) float32, for a centralized critic (2v2)
+    def get_state(self) -> np.ndarray: ...                   # (n_matches, 2, state_dim) float32, one per team in its own frame, for a centralized critic (2v2)
 ```
 
 **Actions (decided in Phase 3, I1–I2).** The action is **mixed**: three discrete parts and
@@ -296,10 +298,24 @@ and static target); Phase 4's bots replace them at merge.
 
 ### 4.4 Episode stats for the exploit watchlist
 
-For every ended match, `info[m]` holds per-agent totals: kills, deaths, falls, damage dealt
-and taken, shots, hits, seconds airborne, seconds hovering (airborne with near-zero
-vertical speed), mean distance to the nearest visible enemy when shooting, and kills made
-within 8 tiles of an enemy spawn. Team B decides in step 5.6 which of these are logged.
+For every ended match, `info[m]` is `{"map_seed", "score" (2,), "outcome" (2,), "agents"}`;
+`agents` maps each name in `rl_donut.env.match_env.STATS` to an (A,) array:
+
+| Name | Meaning |
+|---|---|
+| `kills`, `deaths`, `falls` | as in the events; `kills` includes credited pit falls |
+| `damage_dealt`, `damage_taken`, `shots`, `hits` | totals |
+| `airborne_s`, `hover_s` | seconds alive off the ground; of those, seconds with vertical speed under 1 tile/s |
+| `fire_distance` | mean distance to the nearest enemy the agent could see, over shots fired with one in sight; NaN if none |
+| `spawn_kills` | kills made within 8 tiles of an enemy spawn |
+
+Team B decides in step 5.6 which of these are logged. All matches in a batch end on the same
+step (they last exactly 900 steps and start together), so stats arrive in bursts.
+
+**`get_state()` (I13).** Per team, in that team's frame: 4 agent slots (own team first, then
+enemies; empty slots in 1v1) of 12 numbers each (present, alive, x, y, vx, vy, health, ammo,
+fuel, aim cos, aim sin, respawn time), then time left and score difference, for 50 in total.
+It is not limited by sight, so it is only for the critic.
 
 ### 4.5 Files
 
@@ -343,6 +359,12 @@ Decisions:
   it); optionally mirror to TensorBoard or Weights & Biases. Pick one or none.
 
 ### Step 5.2 — Stand-in environment and the contract test
+
+**Update:** the real `rl_donut.env.MatchEnv` now exists (Phase 3 step 4, `spec_version`
+"0.3"), with observations, actions, auto-reset, episode stats and `get_state()`. Team B can
+train against it directly and skip the stand-in. The contract test is still worth writing,
+because it pins the interface for both teams. Phase 3 step 5 writes it on Team A's side if
+Team B hasn't yet. The rest of this step is kept for reference.
 
 Build: `rl_donut.rl.stand_in.StandInEnv` following section 4, plus
 `tests/test_env_contract.py`.
@@ -499,7 +521,9 @@ reward = 0.5 × team + 0.5 × own.
 Decisions:
 - **Centralized critic vs. independent critics** (MAPPO vs. IPPO). IPPO is simpler and
   often competitive; measure both if time allows.
-- **What `get_state()` holds** (affects Team A's Phase 3; agree on it early).
+- **What `get_state()` holds:** decided in Phase 3 (I13, section 4.4). Note that the
+  observation has no team ID (team B's view is mirrored, so sides look the same) and no
+  agent ID; add one in the trainer if parameter sharing needs it.
 - **Team reward mix**, and whether teammates' damage-taken counts.
 - **Teammate spacing** in the watchlist.
 
@@ -515,11 +539,11 @@ Decide 1v1, 2v2 or both for the rest of the project, based on 6.4 and 6.5 result
 |---|---|---|---|
 | Confirmation of section 4's shape | both | before step 5.2 | — |
 | Aim action design | Team A (Phase 3) | done: continuous angle (I1) | — |
-| `get_state()` contents | Team A, agreed with Team B | Phase 3 | IPPO without a centralized critic |
-| Real `MatchEnv` | Team A | end of Phase 3 | the stand-in |
+| `get_state()` contents | Team A | done (I13) | — |
+| Real `MatchEnv` | Team A | done (Phase 3 step 4) | — |
 | Scripted bots (turret, rusher) | Team A | end of Phase 4 | Team B's random and static-target bots |
 | Replay writer | Team A | end of Phase 4 | none needed for training |
-| Episode stats (4.4) | Team A | Phase 3 | the stand-in's own |
+| Episode stats (4.4) | Team A | done | — |
 | Reward function, kill credit for falls (G4) | Team B | step 5.3 | — |
 | PyTorch pin | Team B | step 5.1 | — |
 

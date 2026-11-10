@@ -11,7 +11,7 @@ in [`DESIGN.md`](../DESIGN.md) with `I` IDs.
 | 1 | Action space | done |
 | 2 | Visibility | done |
 | 3 | Observations | done |
-| 4 | Batched `MatchEnv` | — |
+| 4 | Batched `MatchEnv` | done |
 | 5 | Shared contract test | — |
 | 6 | Gravity and thrust randomization | — |
 | 7 | Full environment speed benchmark | — |
@@ -224,3 +224,73 @@ Per decision step for 64 matches:
 |---|---|---|---|---|
 | 1v1 | 0.44 ms | 0.71 ms | 0.39 ms | 41,500 |
 | 2v2 | 0.59 ms | 1.07 ms | 0.56 ms | 28,800 |
+
+## Step 4 — The batched environment
+
+`rl_donut.env.MatchEnv` is what the trainer uses. It follows section 4 of the handoff
+contract (`spec_version` "0.3"):
+
+```python
+env = MatchEnv(n_matches=64, team_size=1, split="train", seed=0)
+obs = env.reset()                                    # (64, 2, 330)
+result = env.step(discrete, continuous)              # (64, 2, 3) int, (64, 2, 1) float, each agent's own frame
+result.obs, result.events, result.done, result.final_obs, result.info
+state = env.get_state()                              # (64, 2, 50), for a centralized critic
+```
+
+Each step:
+1. Turns actions into engine controls, mirroring team B's back (`decode`).
+2. Plays one decision step (`match_step`).
+3. Updates the observers' memory, visibility and the episode stats.
+4. Builds observations.
+
+When a match ends, `final_obs` keeps its last observation and `info[m]` its episode stats. The
+match then restarts on the next map and `obs[m]` becomes the new match's first observation.
+
+### Decisions (I12–I15)
+
+- **A shuffled map deck (I12).** The split's maps (after `map_filter`, e.g. "no pits" for
+  an early curriculum) are shuffled with the env's seed and dealt in order. When the deck
+  runs out it is reshuffled. Every map is played equally often, and a seed always gives the
+  same order. A uniform random draw would repeat some maps and skip others for long stretches.
+- **`get_state()` per team (I13).** A centralized critic sees the true state, not limited by
+  sight. With mirrored observations, a critic for team B needs the state in team B's frame
+  too, so there is one state per team: (M, 2, 50). Each has 4 agent slots (own team first)
+  of 12 numbers, plus time left and score difference.
+- **Episode stats (I14).** For each agent: kills, deaths, falls, damage dealt and taken,
+  shots, hits, seconds airborne and hovering (airborne, vertical speed under 1 tile/s), mean
+  distance to the nearest visible enemy when firing, and kills within 8 tiles of an enemy
+  spawn. They are the raw material for the exploit watchlist (spawn camping, hovering out
+  of reach, sniping from cover).
+- **Matches end together (I15).** Every match lasts 900 steps and they start together, so
+  a batch ends and restarts in one step. Staggering would need a shortened first match or a
+  fake clock, which would distort "time left". The only effect is that stats arrive in bursts.
+
+### Tests
+
+`tests/test_match_env.py` plays a full 60 s 2v2 match on 8 maps and checks:
+- auto-reset onto new maps;
+- `final_obs` against the new first observation;
+- episode stats against the per-step events summed over the match.
+
+It also checks:
+- the same seed gives the same run, and a different seed doesn't;
+- the deck deals every map once per pass, and `map_filter` works;
+- giving both sides the same actions on a symmetric map keeps the whole match a mirror image,
+  for every observation and for `get_state`.
+
+That last test caught a rounding issue. Running moves 0.2 tiles per tick, so positions often
+land within 10⁻¹⁴ of a tile edge, and team B's mirrored x (width − x) rounds the other way.
+The two sides then saw windows one column apart. Tiles are now found after a 10⁻⁹ nudge.
+
+### Speed
+
+With random actions, measured with the laptop's load average at about 4:
+
+| Format | 16 matches | 64 matches | 256 matches |
+|---|---|---|---|
+| 1v1 | 9,000 | 22,000 | 36,300 |
+| 2v2 | 6,400 | 19,400 | 34,500 |
+
+These are match steps per second. Visibility is about 40% of the time, the engine 30% and
+observations 25%. Step 3.7 measures this properly.
