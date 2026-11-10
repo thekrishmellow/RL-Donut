@@ -19,8 +19,8 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | Step | Status | Scope |
 |---|---|---|
 | **5.1** | **done** | Tools, PyTorch pin, and Team B guide (`docs/rl.md`) |
-| **5.2** | next | Stand-in environment (`StandInEnv`) and contract test (`tests/test_env_contract.py`) |
-| **5.3** | planned | Reward function and shaping (`rl_donut.rl.rewards`) |
+| **5.2** | **done** | Stand-in environment (`StandInEnv`) and contract test (`tests/test_env_contract.py`) |
+| **5.3** | next | Reward function and shaping (`rl_donut.rl.rewards`) |
 | **5.4** | planned | PPO implementation (`rl_donut.rl.ppo`) |
 | **5.5** | planned | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
 | **5.6** | planned | Logging, exploit watchlist, checkpoint manager |
@@ -41,6 +41,8 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 |---|---|---|---|
 | R1 | Deep learning framework & device | PyTorch `2.14.1`, default to `cpu` with auto-detect for `cuda`/`mps` | PyTorch is named in the project brief. For small 2 × 256 MLPs with batch sizes of 16–64 environments, CPU execution avoids GPU/MPS kernel dispatch and synchronization latency, and ensures bitwise reproducibility across runs. |
 | R2 | Experiment tracking | Pure local `runs/<id>/metrics.jsonl` | Self-contained, zero cloud credentials or third-party service dependencies, works offline, and directly powers the Phase 9 dashboard. Optional lightweight terminal summary each update. |
+| R3 | Stand-in fidelity | Reuse real `World`, `physics_tick`, and `line_of_sight`; minimal health & timer rules | Gives accurate flight and collision mechanics without waiting for Team A's respawn/match loops. The stand-in is purely a scaffold for training pipeline development. |
+| R4 | Action space flexibility | `action_nvec = (3, 2, A, 2)` with configurable aim bins `A` (default 16) | PPO multi-head actor handles any discrete action dimensions dynamically, enabling experimentation with finer aim angles or enemy-relative targeting. |
 
 ---
 
@@ -86,3 +88,28 @@ Every PPO update writes one line of compact JSON to `runs/<id>/metrics.jsonl`:
 }
 ```
 This file format is human-readable, append-only, and trivial to parse for plotting.
+
+
+---
+
+## Step 5.2: Stand-In Environment & Shared Contract
+
+### `StandInEnv` Architecture
+Built in `src/rl_donut/rl/stand_in.py`, the environment provides the exact batched API defined in `docs/handoff_phase5_6.md` §4:
+- Batched across $M$ matches and $A = 2 \times \text{team\_size}$ agents.
+- `reset()` draws random maps from the specified split (`train` or `val`), returning `(M, A, obs_dim)` float32.
+- `step(actions)` executes a 2-tick decision step:
+  - Updates agent kinematics via `physics_tick`.
+  - Simulates hitscan shots using `line_of_sight`.
+  - Tracks damage, kills, and deaths.
+  - Automatically resets expired matches onto new maps while recording pre-reset observations in `final_obs`.
+- Emits raw `Events` (`damage_dealt`, `damage_taken`, `kills`, `deaths`, `fell`, `shots`, `hits`, `outcome`).
+
+### Shared Contract Test
+`tests/test_env_contract.py` tests any environment factory for:
+1. Expected tensor shapes and dtypes (`reset` and `step`).
+2. `spec_version` tracking.
+3. Seeding reproducibility (identical trajectories given identical seeds).
+4. Auto-reset behavior preserving `final_obs`.
+5. Combat event consistency (hits $\le$ shots, non-negative damage).
+6. Non-zero outcomes only occurring upon match completion.
