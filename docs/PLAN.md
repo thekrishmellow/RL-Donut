@@ -340,6 +340,11 @@ renderer, replays); Team B builds Phases 5–6 (rewards, PPO, self-play) on bran
 interface between them, the step list and the merge checklist are in
 [`docs/handoff_phase5_6.md`](handoff_phase5_6.md).
 
+Status (Phase 3 step 5): `phase5-6` already holds Phases 5–8, built on the first draft
+contract. `main` now offers the real `MatchEnv` at contract `spec_version` 0.3 with a shared
+contract test. Section 0 of the handoff guide lists the edits Team B's code needs before the
+merge, the main one being a Gaussian head for the continuous aim.
+
 ---
 
 ## 8. Risks

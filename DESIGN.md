@@ -58,7 +58,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 2. Visibility: batched exact ray caster, who sees whom, team sight — done
 3. Observations: 57 named numbers + 21 × 13 tile grid, mirrored for team B — done
 4. Batched `MatchEnv` (auto-reset, events, episode stats, per-team state) — done
-5. Shared contract test
+5. Shared contract test (spec 0.3) and Team B migration notes — done
 6. Gravity and thrust randomization
 7. Full environment speed benchmark
 8. PettingZoo wrapper
@@ -165,6 +165,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 | I13 | Critic state | `get_state()` → (M, 2, 50): per team in its own frame, 4 agent slots of 12 (own team first) + time left + score difference; not limited by sight | Team B's critic needs team B's frame, like its observations. Contract `spec_version` 0.3 |
 | I14 | Episode stats | Per agent: kills, deaths, falls, damage dealt / taken, shots, hits, seconds airborne and hovering (vertical speed < 1 tile/s), mean distance to nearest visible enemy when firing, kills within 8 tiles of an enemy spawn | Raw material for the exploit watchlist; checked against summed step events |
 | I15 | Episode timing | All matches in a batch start and end together | Staggering needs a shorter first match or a fake clock that distorts "time left"; bursts of stats are harmless |
+| I16 | Contract test | `tests/test_env_contract.py` on `main` for spec 0.3, built from Team B's version, run over a `FACTORIES` list; `SPECS` pins each version's sizes, stat names and observation-name fingerprint; event dtypes checked by kind | Team B's branch was built on the first draft contract; one test both sides run keeps the interface honest, and the pinned layout forces a version bump on change. The handoff guide's section 0 lists Team B's required edits; their branch is not touched |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

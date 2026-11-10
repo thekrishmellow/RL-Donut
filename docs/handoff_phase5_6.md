@@ -21,6 +21,40 @@ numbers from the first design spec, re-examined in their step).
 
 ---
 
+## 0. Read first: what changed since you branched (`c0e9a56`)
+
+`phase5-6` branched from `c0e9a56`, before engine steps 2.6–2.8 and all of Phase 3.
+`main` now has the finished engine and the real RL interface, and the contract moved from
+the first draft to **`spec_version` "0.3"**. The real `rl_donut.env.MatchEnv` exists, so the
+stand-in is no longer needed. `main` has the spec 0.3 contract test, `tests/test_env_contract.py`;
+when you merge `main` into `phase5-6`, take `main`'s version of that file. Results measured
+on the stand-in must be re-run on `MatchEnv`.
+
+What changed, and what it means for the files on `phase5-6`:
+
+| Change (decision) | Was (draft) | Now (spec 0.3) | Edit on `phase5-6` |
+|---|---|---|---|
+| Environment | `rl.stand_in.StandInEnv` | `rl_donut.env.MatchEnv(n_matches, team_size, split, seed, map_filter, cfg, maps)`; short matches via `cfg=EngineConfig(team_size=..., match=MatchConfig(duration=...))` | `runner.py`, `evaluate.py`, scripts: build `MatchEnv`; delete `stand_in.py` (or keep it only as a test fixture) |
+| Actions (I1, I2) | one int array, `action_nvec = (3, 2, 16, 2)` | `env.step(discrete, continuous)`: discrete `(M, A, 3)` int with `action_nvec = (3, 2, 2)` (move, jetpack, shoot) and continuous `(M, A, 1)` float, the aim angle in radians | `runner.py`: pass both arrays; rollout buffers store the continuous part as float32 |
+| Policy head (I1) | categorical heads only (R4, R8) | plus **one Gaussian head** for the aim: mean from the network, learned state-independent log std; log-prob and entropy sum over all four parts | `model.py`, `ppo.py`; no clipping or wrapping of the sampled angle (only its cos and sin are used) |
+| Policy protocol | `act(obs, ctx) -> actions` | `act(obs, ctx) -> (discrete, continuous)` | `bots.py` (`RandomBot`: aim uniform in [−π, π]; `StaticTargetBot`: aim 0, which faces the enemy side in its own frame), pool and style policies |
+| Each agent's frame (I7) | world frame | team B's observations are a mirror image and its actions are mirrored back by the env | nothing for learned policies; scripted code that computes world-frame controls converts with `rl_donut.env.actions.encode(controls, mirror=team == TEAM_B)` |
+| Observations (I6–I11) | stand-in's own (rays, 4 numbers per enemy) | 330 numbers: 57 named (`rl_donut.env.FEATURE_NAMES`) + a 21 × 13 tile window; already scaled; same layout in 1v1 and 2v2; no team or agent ID | take `obs_dim` from the env; old checkpoints and observation statistics are incompatible |
+| Critic state (I13) | `(M, state_dim)` | `get_state()` → `(M, 2, 50)`, one per team in its own frame | `mappo.py`, `runner.py`: use `state[:, team]` |
+| Events | `stand_in.Events`, float32 damage | `rl_donut.env.MatchEvents`: same fields plus logs (`shot_log`, `death_log`, `respawn_log`); damage is float64; the contract checks kinds, not widths | `rewards.py`: cast to float32 as it already does at the end |
+| Episode stats (I14) | computed by the watchlist from the world | `info[m]["agents"]` holds per-agent totals (section 4.4); hover is airborne with vertical speed under **1** tile/s | `watchlist.py`: read `info` (its own hover rule uses 2 tiles/s) |
+| Engine rules (P19–P25) | stand-in's minimal health and timer | real health (100, regeneration after 3 s), respawn after 2 s at a spawn no enemy sees, 1 s protection ended by firing, simultaneous hits, pit falls credited to the last damager within 3 s, 60 s deathmatch | none; rewards built on events keep working |
+| Speed | stand-in | about 22,000 match steps/s at 64 matches in 1v1 on the busy laptop (Phase 3 step 7 measures it properly) | batch sizes in R12 may need revisiting |
+
+Two scope notes:
+- Phases 7 and 8 on `phase5-6` go beyond the agreed Phases 5–6. They are welcome, but they
+  are reviewed together after the merge. Phase 8's "OOD physics shifts" depends on Phase 3
+  step 6 (gravity and thrust randomization ranges), which isn't decided yet.
+- Every result on `phase5-6` (curriculum gates, evaluation, Elo) comes from the stand-in, so
+  it is a pipeline check, not a result, until re-run on `MatchEnv` (merge checklist, item 7).
+
+---
+
 ## 1. Who builds what, and when
 
 ```mermaid
@@ -331,12 +365,23 @@ Loading a checkpoint whose `spec_version` differs from the env's must fail loudl
 
 ### 4.6 The shared contract test
 
-`tests/test_env_contract.py` (written by Team B in step 5.2, owned jointly) checks any
-environment factory against sections 4.1–4.4: shapes and dtypes, auto-reset, seeding
-(same seed → same observations and events), `final_obs` on ended matches, events adding up
-over a match (kills = deaths − falls + credited falls, as `tests/test_match.py` checks), `outcome` only
-on `done`, `spec_version` present. It runs against the stand-in now and against the real
-env at merge; the merge is done when both pass.
+`tests/test_env_contract.py` (owned jointly; the spec 0.3 version is on `main`, written
+in Phase 3 step 5 from Team B's step 5.2 version) checks every environment factory in its
+`FACTORIES` against sections 4.1–4.4. Its `SPECS` table pins what each `spec_version`
+promises (sizes, a fingerprint of the observation feature names, the episode stat names),
+so a layout change without a version bump fails. Event arrays are checked by kind (float,
+integer, bool), not width. It checks:
+- shapes and kinds of observations, events, `done`, `info` and `get_state()`;
+- invalid actions raise `ValueError`;
+- the same seed gives the same observations and events, and a different seed doesn't;
+- auto-reset: matches end together, `final_obs` differs from the next match's first
+  observation, and `outcome` is non-zero only on `done`;
+- `info` holds the episode stats;
+- events add up over a match: hits ≤ shots, no friendly fire, every kill is a death, and the
+  score equals kills per team.
+
+It passes against `MatchEnv` in 1v1 and 2v2. At merge it must still pass on the merged
+branch; if the stand-in is kept as a fixture, add it to `FACTORIES`.
 
 ---
 

@@ -12,7 +12,7 @@ in [`DESIGN.md`](../DESIGN.md) with `I` IDs.
 | 2 | Visibility | done |
 | 3 | Observations | done |
 | 4 | Batched `MatchEnv` | done |
-| 5 | Shared contract test | — |
+| 5 | Shared contract test | done |
 | 6 | Gravity and thrust randomization | — |
 | 7 | Full environment speed benchmark | — |
 | 8 | PettingZoo wrapper | — |
@@ -294,3 +294,24 @@ With random actions, measured with the laptop's load average at about 4:
 
 These are match steps per second. Visibility is about 40% of the time, the engine 30% and
 observations 25%. Step 3.7 measures this properly.
+
+## Step 5 — The shared contract test
+
+`tests/test_env_contract.py` is the interface's promise to the trainer, owned by both teams.
+It runs every environment factory in `FACTORIES` (today only `MatchEnv`, in 1v1 and 2v2)
+through the checks in section 4.6 of the handoff guide: shapes and kinds, invalid actions,
+seeding, auto-reset with `final_obs` and `info`, and events adding up over a match.
+
+Two choices:
+- **Versioned layout (I16).** `SPECS` records what each `spec_version` promises: sizes, the
+  episode stat names, and a fingerprint of the observation feature names. Changing the
+  layout without bumping the version and adding an entry fails the test.
+- **Kinds, not widths (I16).** Events are checked as float, integer or bool. The engine
+  keeps damage in float64; a trainer that wants float32 casts it.
+
+When this step started, Team B's branch turned out to already have a contract test and a
+stand-in. Both were built on the first draft contract (16 aim directions, no mirroring, its
+own observations), because the branch started before Phase 3. The spec 0.3 test above keeps
+every check from Team B's version and adds the new ones. Section 0 of
+[`handoff_phase5_6.md`](handoff_phase5_6.md) lists what changed since that branch started,
+and the edits Team B's code needs.
