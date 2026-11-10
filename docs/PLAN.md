@@ -10,6 +10,7 @@ open. It is a living document; update it whenever a phase lands or a plan change
 | [`DESIGN.md`](../DESIGN.md) | Decision log: every approved choice, numbered, with its reason |
 | [`docs/mapgen.md`](mapgen.md) | Deep dive into the map generator (Phase 1), step by step |
 | [`docs/engine.md`](engine.md) | Deep dive into the game engine (Phase 2), step by step |
+| [`docs/handoff_phase5_6.md`](handoff_phase5_6.md) | Guide for the teammate building Phases 5–6 in parallel: interface contract, steps, merge checklist |
 | [`README.md`](../README.md) | Setup, everyday commands, repository layout |
 
 Status markers used below: **approved** (in `DESIGN.md`, may be built), **draft** (a
@@ -323,8 +324,11 @@ lower step rate; Phase 3's speed benchmark decides.
 
 ### Team
 
-Currently two people (you and the assistant). Later, friends may own separate areas; the
-contracts in section 4 exist so each area can be built against them independently.
+Two teams working in parallel. Team A finishes Phases 2–4 (engine, RL interface, bots,
+renderer, replays); Team B builds Phases 5–6 (rewards, PPO, self-play) on branch
+`phase5-6` against a stand-in environment. The two are merged at the end of Phase 4. The
+interface between them, the step list and the merge checklist are in
+[`docs/handoff_phase5_6.md`](handoff_phase5_6.md).
 
 ---
 
@@ -348,9 +352,9 @@ contracts in section 4 exist so each area can be built against them independentl
 | Final format: 1v1, 2v2 or both | Phase 6 | G3 |
 | Grenades in v1 or v2 | Phase 2 | Draft says v2 |
 | Gravity and thrust randomization ranges | Phase 3 | Must keep the climb and level-flight contracts (P11) |
+| Aim action | Phase 3 | 16 fixed directions are 22.5° apart, but a hitbox 10 tiles away spans about 4.6°, so most targets can't be hit. Options: finer directions, aim relative to the nearest seen enemy, or continuous aim. The engine takes any angle (P17) |
 | Kill credit for falls | Phase 5 | G4 |
 | PyTorch, PettingZoo, renderer, tracker, dashboard tool | Their phases | Section 6 |
 | Compute targets (environments, steps/s) | Phase 3 | Section 7 |
 | OOD split definitions | Phase 8 | M49 |
-| Aim action | Phase 3 | 16 fixed directions are 22.5° apart, but a hitbox 10 tiles away spans about 4.6°, so most targets can't be hit. Options: finer directions, aim relative to the nearest seen enemy, or continuous aim. The engine takes any angle (P17) |
 | CI (tests on every push) | Any time; before friends join | Section 7 |

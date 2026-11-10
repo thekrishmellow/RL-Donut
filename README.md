@@ -14,6 +14,7 @@ self-play, and are evaluated on maps they have never seen.
 | [`DESIGN.md`](DESIGN.md) | Project phases and the decision log (every choice, with its reason) |
 | [`docs/mapgen.md`](docs/mapgen.md) | How the map generator works, step by step, with code and the reasoning behind it |
 | [`docs/engine.md`](docs/engine.md) | How the game engine works, step by step, and the promises it keeps to the map generator |
+| [`docs/handoff_phase5_6.md`](docs/handoff_phase5_6.md) | For the teammate building Phases 5–6: what exists, the interface contract, every step and decision, the merge checklist |
 
 ## Setup
 
@@ -38,8 +39,8 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/preview_world.py --count 4            # engine worlds: agents and spawns -> outputs/world_preview.png (--trace N: random-motion paths)
 .venv/bin/python scripts/preview_physics.py                    # one tank's flight paths vs the generator's needs -> outputs/physics_preview.png
 .venv/bin/python scripts/route_check.py                        # route bot flies 2,000 generator routes; failures -> outputs/route_failures.png
-```
 .venv/bin/python scripts/preview_rifle.py --count 3            # fans of rifle shots on real maps -> outputs/rifle_preview.png
+```
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
 `rl_donut.mapgen.load_split("train")`. Rebuild only after changing the generator (see the
@@ -53,6 +54,7 @@ RL-Donut/
 ├── docs/PLAN.md               Whole-project plan and technical design
 ├── docs/mapgen.md             Map generator guide
 ├── docs/engine.md             Game engine guide
+├── docs/handoff_phase5_6.md   Phases 5–6 handoff: contract, steps, merge plan
 ├── requirements.txt           Pinned dependencies
 ├── pyproject.toml             Package + pytest config
 ├── src/rl_donut/
@@ -61,9 +63,9 @@ RL-Donut/
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
 │   │   ├── physics.py         One tick: controls, gravity, jetpack, speed limits, fuel
+│   │   ├── rifle.py           Aiming, hitscan shots, cooldown, magazine and reload
 │   │   └── navigation.py      Route planner on the generator's flight model, and a bot that flies it
 │   └── mapgen/                Phase 1: procedural maps
-│   │   ├── rifle.py           Aiming, hitscan shots, cooldown, magazine and reload
 │       ├── seeding.py         Master seed -> independent named random streams
 │       ├── generator.py       Pipeline entry point: generate_map(seed) -> GeneratedMap
 │       ├── config.py          All generator settings (MapConfig and one config per step)
@@ -85,9 +87,9 @@ RL-Donut/
 │   ├── preview_world.py
 │   ├── preview_physics.py
 │   ├── route_check.py
+│   ├── preview_rifle.py
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
-│   ├── preview_rifle.py
 ├── map_cache/                 Resumable build chunks (git-ignored)
 └── outputs/                   Generated images and logs (git-ignored)
 ```
