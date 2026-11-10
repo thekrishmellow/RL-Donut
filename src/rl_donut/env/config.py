@@ -49,6 +49,22 @@ class RifleConfig:
 
 
 @dataclass(frozen=True)
+class LifeConfig:
+    max_health: float = 100.0
+    # Health per second, starting once `regen_delay` seconds pass without damage.
+    regen_rate: float = 10.0
+    # Times in seconds; each must be a whole number of ticks.
+    regen_delay: float = 3.0
+    respawn_time: float = 2.0
+    # No damage for this long after respawning; firing ends it early.
+    protection_time: float = 1.0
+
+    def __post_init__(self):
+        if min(self.max_health, self.respawn_time) <= 0 or min(self.regen_rate, self.regen_delay, self.protection_time) < 0:
+            raise ValueError("health and respawn settings must be positive")
+
+
+@dataclass(frozen=True)
 class EngineConfig:
     # Agents per team: 1 for 1v1, 2 for 2v2.
     team_size: int = 1
@@ -60,6 +76,7 @@ class EngineConfig:
     hitbox_h: float = 1.6
     physics: PhysicsConfig = field(default_factory=PhysicsConfig)
     rifle: RifleConfig = field(default_factory=RifleConfig)
+    life: LifeConfig = field(default_factory=LifeConfig)
     map: MapConfig = field(default_factory=MapConfig)
 
     def __post_init__(self):
@@ -75,17 +92,22 @@ class EngineConfig:
         p = self.physics
         if max(p.max_rise_speed, p.max_fall_speed, p.run_speed) * self.dt >= 1:
             raise ValueError("every speed limit must stay under one tile per tick")
-        for seconds in (self.rifle.shot_interval, self.rifle.reload_time):
+        life = self.life
+        for seconds in (self.rifle.shot_interval, self.rifle.reload_time, life.regen_delay,
+                        life.respawn_time, life.protection_time):
             if abs(seconds * self.tick_rate - round(seconds * self.tick_rate)) > 1e-9:
-                raise ValueError("rifle times must be whole numbers of ticks")
+                raise ValueError("rifle and respawn times must be whole numbers of ticks")
+
+    def ticks(self, seconds: float) -> int:
+        return round(seconds * self.tick_rate)
 
     @property
     def shot_interval_ticks(self) -> int:
-        return round(self.rifle.shot_interval * self.tick_rate)
+        return self.ticks(self.rifle.shot_interval)
 
     @property
     def reload_ticks(self) -> int:
-        return round(self.rifle.reload_time * self.tick_rate)
+        return self.ticks(self.rifle.reload_time)
 
     @property
     def n_agents(self) -> int:

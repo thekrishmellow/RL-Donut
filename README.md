@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): steps 1–5 of 8 done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): steps 1–6 of 8 done.
 
 ## Documentation
 
@@ -64,6 +64,7 @@ RL-Donut/
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
 │   │   ├── physics.py         One tick: controls, gravity, jetpack, speed limits, fuel
 │   │   ├── rifle.py           Aiming, hitscan shots, cooldown, magazine and reload
+│   │   ├── life.py            Damage, regeneration, death, respawn, spawn protection
 │   │   └── navigation.py      Route planner on the generator's flight model, and a bot that flies it
 │   └── mapgen/                Phase 1: procedural maps
 │       ├── seeding.py         Master seed -> independent named random streams

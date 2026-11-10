@@ -46,8 +46,8 @@ Each step ends with a test or picture; its decisions are discussed when it start
 3. Movement, jetpack and fuel (climb and < 1 tile per tick contracts) — done
 4. Route check (a scripted bot flies generator routes on many seeds, M4b): 99.80% arrive — done
 5. Aiming and hitscan rifle (uses `geometry.line_of_sight`, M40) — done
-6. Health, death and respawn — next
-7. Match loop: tick order, timer, scoring, action repeat, event log; determinism test
+6. Health, death and respawn — done
+7. Match loop: tick order, timer, scoring, action repeat, event log; determinism test — next
 8. Debug viewer (script only) and engine speed check
 
 ## Decisions
@@ -127,6 +127,10 @@ Each step ends with a test or picture; its decisions are discussed when it start
 | P16 | Rifle numbers | 15 damage, 0.2 s between shots, 30-round magazine, automatic 1.5 s reload when empty, unlimited spares, 30-tile range, uniform ±2° spread | 7 hits (about 1.2 s) to kill. Aimed at the centre, 10-tile shots always hit; at 30 tiles about 76% hit a target to the side (spread moves the shot across the 1.6-tile height) and 38% one straight above or below (0.8-tile width) |
 | P17 | Aim | Any angle per agent, applied instantly; 0 = right, π/2 = down; team A starts aiming right, team B left | Keeps the engine independent of the Phase 3 action design (16 fixed directions are too coarse to hit at range) |
 | P18 | Friendly fire and randomness | Teammates are neither hit nor in the way; spread comes from one random stream per match, seeded from (world seed, map seed, episode) | As in Mini Militia team modes, and RL can't learn to hurt teammates; per-match streams keep a match identical whatever else is in its batch |
+| P19 | Same-tick hits | All hits fired on a tick are applied together, so trades kill both; the killer is the top damage dealer on the killing tick, ties broken by the match's random stream | Agent-order resolution would hand every tie to the lower-numbered agent, a bias RL would learn. In random 2v2 fights 45 of 286 kills were trades |
+| P20 | Health and death | 100 health; regenerates 10/s after 3 s without damage; death at 0 health or below the kill line; a fall has no killer in the engine but records the last damager and how long before | Regeneration per G2; 13 s from almost dead to full makes retreat a real choice against a 1.2 s time to kill. Fall credit is G4's decision (Phase 5), so the engine only records the facts |
+| P21 | Respawn | After 2 s, at a random own spawn no living enemy can see (`line_of_sight` centre to centre, any distance), else the one farthest from the nearest enemy; full health, fuel and ammo, aim towards the centre | Prevents spawn camping; random choice avoids a predictable spawn. Fallback used 5 times in 303 respawns of random fights |
+| P22 | Spawn protection | 1 s without damage after respawning; firing ends it | As in Mini Militia; stops protection being used to attack for free |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

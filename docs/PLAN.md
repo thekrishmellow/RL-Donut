@@ -63,7 +63,7 @@ tooling, `M` map generator; later phases add their own letters).
 |---|---|---|---|
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
-| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–5 done, step 6 next) |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–6 done, step 7 next) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
@@ -166,8 +166,9 @@ shooting because a failure there would change the generator and force a rebuild 
 | Movement | approved (P8–P10) | Run 6 tiles/s (set directly); gravity 25 tiles/s²; thrust 40 tiles/s²; rising limit 12, falling limit 20 tiles/s |
 | Fuel | approved (P8) | 100; drains 32/s while thrusting, refills 25/s while standing |
 | Rifle | approved (P15–P18) | Hitscan from the hitbox centre, checked with the generator's `line_of_sight`; 15 damage; 0.2 s between shots; uniform ±2° spread; 30-round magazine, 1.5 s auto-reload, unlimited reserve; 30-tile range; no friendly fire; aim at any angle, instantly |
-| Health | draft | 100; regenerates 10/s after 3 s without damage (on, per G2) |
-| Match | draft | Timed deathmatch with respawns: 2 s respawn at a spawn out of enemy sight, 1 s protection; most kills wins, equal is a draw |
+| Health | approved (P19, P20) | 100; regenerates 10/s after 3 s without damage (on, per G2); same-tick hits applied together; death at 0 health or below the kill line |
+| Respawn | approved (P21, P22) | 2 s, at a random own spawn no living enemy can see; 1 s protection, ended by firing |
+| Match | draft | Timed deathmatch with respawns; most kills wins, equal is a draw |
 | Out of scope for v1 | draft | Grenades (first v2 addition), pickups, weapon switching, melee, zoom, dual wield |
 
 Required tests, from Phase 1 contracts: climb at least `climb_budget` on one tank; motion

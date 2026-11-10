@@ -42,6 +42,9 @@ class AgentView:
     ammo: int
     cooldown: int
     reload: int
+    health: float
+    respawn: int
+    protection: int
 
 
 @dataclass
@@ -63,6 +66,11 @@ class World:
     ammo: np.ndarray        # (M, A) rounds in the magazine
     cooldown: np.ndarray    # (M, A) ticks until the rifle can fire again
     reload: np.ndarray      # (M, A) ticks of reloading left; 0 = not reloading
+    health: np.ndarray      # (M, A)
+    since_damage: np.ndarray  # (M, A) ticks since last damaged; regeneration waits on it
+    last_damager: np.ndarray  # (M, A) agent that last damaged this one, -1 = none since respawn
+    respawn: np.ndarray     # (M, A) ticks until a dead agent respawns; 0 with alive False = out of play
+    protection: np.ndarray  # (M, A) ticks of spawn protection left
     # Random numbers (rifle spread) come from one stream per match, seeded from
     # (rng_seed, map seed, episode), so a match never depends on the rest of its batch.
     rng_seed: int = 0
@@ -92,6 +100,9 @@ class World:
             fuel=np.zeros((n, k)), alive=np.ones((n, k), dtype=bool),
             aim=np.zeros((n, k)), ammo=np.zeros((n, k), dtype=np.int64),
             cooldown=np.zeros((n, k), dtype=np.int64), reload=np.zeros((n, k), dtype=np.int64),
+            health=np.zeros((n, k)), since_damage=np.zeros((n, k), dtype=np.int64),
+            last_damager=np.zeros((n, k), dtype=np.int64), respawn=np.zeros((n, k), dtype=np.int64),
+            protection=np.zeros((n, k), dtype=np.int64),
             rng_seed=rng_seed, episode=np.full(n, -1, dtype=np.int64), rngs=[None] * n,
         )
         world.reset()
@@ -109,7 +120,8 @@ class World:
         """Start the given matches (default: all) from tick 0, agent `i` of each team on spawn `i`.
 
         Team B's spawns mirror team A's, so starting positions are mirror images. Team A aims
-        right and team B left; every rifle starts loaded and ready.
+        right and team B left; every rifle starts loaded and ready, every agent at full health
+        and without spawn protection.
         """
         matches = np.arange(self.n_matches) if matches is None else np.asarray(matches)
         slot = np.arange(self.cfg.n_agents) % self.cfg.team_size
@@ -121,6 +133,10 @@ class World:
         self.aim[matches] = np.where(self.team == TEAM_A, 0.0, np.pi)
         self.ammo[matches] = self.cfg.rifle.magazine
         self.cooldown[matches] = self.reload[matches] = 0
+        self.health[matches] = self.cfg.life.max_health
+        self.since_damage[matches] = 0
+        self.last_damager[matches] = -1
+        self.respawn[matches] = self.protection[matches] = 0
         self.tick[matches] = 0
         for m in matches:
             self.episode[m] += 1
@@ -132,4 +148,5 @@ class World:
                          float(self.vy[match, agent]), float(self.fuel[match, agent]),
                          bool(self.alive[match, agent]), float(self.aim[match, agent]),
                          int(self.ammo[match, agent]), int(self.cooldown[match, agent]),
-                         int(self.reload[match, agent]))
+                         int(self.reload[match, agent]), float(self.health[match, agent]),
+                         int(self.respawn[match, agent]), int(self.protection[match, agent]))

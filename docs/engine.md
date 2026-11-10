@@ -28,8 +28,8 @@ The map generator assumed these when it decided which maps are valid. Each one b
 | 3. Movement, jetpack and fuel | done | `src/rl_donut/env/physics.py`, `src/rl_donut/env/config.py` |
 | 4. Route check | done | `src/rl_donut/env/navigation.py`, `scripts/route_check.py` |
 | 5. Aiming and hitscan rifle | done | `src/rl_donut/env/rifle.py`, `src/rl_donut/env/config.py` |
-| 6. Health, death and respawn | next | — |
-| 7. Match loop | planned | — |
+| 6. Health, death and respawn | done | `src/rl_donut/env/life.py`, `src/rl_donut/env/config.py` |
+| 7. Match loop | next | — |
 | 8. Debug viewer and speed check | planned | — |
 
 ---
@@ -462,3 +462,72 @@ maps: blue lines stop at rock or the 30-tile range, red ones hit an enemy.
   on an enemy spawn, aiming at its centre or near any corner;
 - random play with physics on 20 maps: only enemies are hit, every hit point is on the
   target's hitbox, within range and in sight.
+
+---
+
+## Step 6: Health, death and respawn (`life.py`)
+
+`life_tick(world, shots)` runs once per tick, after the rifles fire, and returns what
+happened: damage dealt and taken per agent, deaths and respawns (`LifeEvents`).
+
+### Order within a tick
+
+1. Firing ends the shooter's spawn protection.
+2. Every hit fired on this tick is applied **at once**, so two agents can kill each other
+   (a trade). Applying them in agent order would let the lower-numbered agent always win
+   ties, a hidden bias RL would learn.
+3. Agents at 0 health, or below the kill line after falling through a pit, die.
+4. Living agents regenerate.
+5. Spawn protection counts down.
+6. Dead agents count down to respawn; when the timer ends they reappear.
+
+### Settings (`LifeConfig`)
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `max_health` | 100 | 7 rifle hits kill |
+| `regen_rate`, `regen_delay` | 10/s after 3 s | No damage for 3 s, then 10 health per second: 13 s from almost dead to full, so retreating to heal is a real decision |
+| `respawn_time` | 2 s | Dead agents don't move, shoot or get hit |
+| `protection_time` | 1 s | No damage after respawning; firing ends it early, so protection can't be used to attack for free |
+
+Times must be whole numbers of ticks.
+
+### Kills and falls
+
+- The **killer** is the agent that dealt the most damage to the victim on the killing tick;
+  ties (in 2v2) are broken with the match's random stream, again so agent order never
+  matters.
+- A **fall** below the kill line has no killer in the engine. Each `Death` records the last
+  agent to damage the victim and how many ticks before, so Phase 5 can decide who gets
+  credit (G4) without engine changes.
+
+### Where agents respawn
+
+A random spawn of the agent's own team that no living enemy can see, using the same
+`line_of_sight` as the rifle, centre to centre, at any distance. If every spawn is seen,
+the one farthest from the nearest enemy. On respawn the agent gets full health, fuel and
+magazine, zero speed, and aims towards the map centre.
+
+### What random fights look like
+
+100 val maps, 2v2, 60 s, random movers aiming roughly at an enemy, enemies starting on top
+of each other: 286 kills, 17 pit falls, 303 respawns; 45 deaths were same-tick trades; the
+"every spawn is seen" fallback was used 5 times. The 100 matches took about 1 s together.
+
+**Tests** (`tests/test_life.py`):
+
+- invalid settings and times that aren't whole ticks are rejected; reset restores health;
+- 7 hits kill; damage dealt and taken add up; same-tick hits kill both agents;
+- the killer is the top damage dealer, with ties going either way;
+- a fall kills without a killer and records the last damager and when;
+- regeneration starts exactly 3 s after the last damage, at 10/s, up to 100; new damage
+  restarts the wait;
+- respawn exactly 2 s after death with full health, fuel and ammo, on an own spawn, aiming
+  inwards; 1 s of protection, ended by firing; dead agents stay frozen and can't be hit;
+  agents taken out of play never respawn;
+- on 60 val maps, the respawn spawn is hidden from every living enemy whenever one is, and
+  otherwise the farthest; the choice is random among safe spawns;
+- 60 s of random 2v2 fights on 20 maps: kills and respawns happen, health stays in range,
+  living agents never enter rock, nobody stays dead longer than 2 s, damage dealt equals
+  damage taken;
+- the same inputs give the same match, bit for bit.

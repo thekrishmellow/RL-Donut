@@ -26,7 +26,7 @@ numbers from the first design spec, re-examined in their step).
 ```mermaid
 flowchart LR
     subgraph A[Team A: engine and interface]
-        A2[Phase 2 steps 6-8<br/>health, match loop, speed] --> A3[Phase 3<br/>observations, actions, env API]
+        A2[Phase 2 steps 7-8<br/>match loop, speed] --> A3[Phase 3<br/>observations, actions, env API]
         A3 --> A4[Phase 4<br/>bots, renderer, replays]
     end
     subgraph B[Team B: learning]
@@ -78,10 +78,13 @@ an array of shape (matches, agents), agents ordered team A first (`[A, B]` in 1v
 | Physics | `env/physics.py` | `physics_tick(world, move_dir, jet)`; run 6 tiles/s; gravity 25, thrust 40; fuel 100, drains 32/s, refills 25/s on the ground |
 | Route check | `env/navigation.py` | `Navigator` and `RouteBot`: plans and flies routes between floors (99.80% arrive). Useful for scripted bots |
 | Rifle | `env/rifle.py` | `fire(world, aim, trigger) -> list[Shot]`; hitscan, 15 damage, 0.2 s between shots, 30 rounds, 1.5 s reload, 30-tile range, ±2° spread, no friendly fire; aim is any angle in radians (0 = right, π/2 = down) |
+| Life | `env/life.py` | `life_tick(world, shots) -> LifeEvents` (damage dealt and taken, `Death`s, respawns); same-tick hits applied together; a fall's `Death` has no killer but records the last damager and when (for G4) |
 
-Still to come from Team A (steps 6–8): health with regeneration (G2), death, respawn
-with spawn protection, the match loop (timer, scoring, decision every 2 ticks, event log),
-determinism test, debug viewer and speed check.
+Still to come from Team A (steps 7–8): the match loop (timer, scoring, decision every 2
+ticks, event log), determinism test, debug viewer and speed check.
+
+A stand-in environment (step 5.2) can already chain the real pieces each tick:
+`physics_tick` → `fire` → `life_tick`.
 
 ### Numbers Team B will care about (draft unless marked)
 
@@ -91,8 +94,8 @@ determinism test, debug viewer and speed check.
 | Decision rate | every 2 ticks = 15 decisions/s (draft) | A 60 s match is **900 decision steps** |
 | Match length | 60 s (draft) | Long episodes: γ = 0.99 sees about 100 steps (7 s) ahead |
 | Time to kill | 7 hits ≈ 1.2 s at full fire rate (approved) | Fights are short compared with episodes |
-| Health | 100, regenerates 10/s after 3 s without damage (draft) | Retreating is a real tactic |
-| Respawn | 2 s, at a spawn out of enemy sight, 1 s protection (draft) | — |
+| Health | 100, regenerates 10/s after 3 s without damage (approved, P20) | Retreating is a real tactic |
+| Respawn | 2 s, at a random own spawn no living enemy can see; 1 s protection, ended by firing (approved, P21–P22) | Spawn camping is hard |
 | Engine speed | ~380 µs per physics tick for 64 matches on a busy laptop | Physics alone allows about 1,300 batch steps/s, i.e. ~84,000 match decision steps/s, before shots, observations and the network; Phase 3 measures the real number |
 
 ### Tooling
@@ -299,9 +302,9 @@ Decisions:
 Build: `rl_donut.rl.stand_in.StandInEnv` following section 4, plus
 `tests/test_env_contract.py`.
 
-- Reuse the real engine where it exists: `World`, `physics_tick`, `fire`. Add the missing
-  rules crudely (health 100, no regeneration or simple regeneration, death on 0 health or
-  falling below `kill_y`, instant respawn at the agent's own spawn, 60 s timer).
+- Reuse the real engine where it exists: `World`, `physics_tick`, `fire`, `life_tick`. Add
+  only what's missing until step 2.7 lands: a 60 s timer, kills as the score, and holding
+  each action for 2 ticks.
 - Observations: a simple version of the Phase 3 draft (self state, relative enemy position
   if in line of sight, a few rays). Keep it behind one function so it's easy to delete.
 - Actions: `(3, 2, A, 2)`, move, jetpack, aim, shoot, with the aim part size `A`
