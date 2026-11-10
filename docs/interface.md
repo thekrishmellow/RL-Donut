@@ -14,7 +14,7 @@ in [`DESIGN.md`](../DESIGN.md) with `I` IDs.
 | 4 | Batched `MatchEnv` | done |
 | 5 | Shared contract test | done |
 | 6 | Gravity and thrust randomization | done |
-| 7 | Full environment speed benchmark | — |
+| 7 | Full environment speed benchmark | done |
 | 8 | PettingZoo wrapper | — |
 
 ## Step 1 — Action space
@@ -293,7 +293,8 @@ With random actions, measured with the laptop's load average at about 4:
 | 2v2 | 6,400 | 19,400 | 34,500 |
 
 These are match steps per second. Visibility is about 40% of the time, the engine 30% and
-observations 25%. Step 3.7 measures this properly.
+observations 25%. Step 7 measures this properly (its 2v2 numbers are lower: 17,600–20,400 at
+256 matches).
 
 ## Step 5 — The shared contract test
 
@@ -364,3 +365,47 @@ contracts at 0.5, 0.85, 1.15 and 1.5; the factor multiplies both accelerations; 
 per match and per episode, repeat for the same seed, and are 1 by default; rifle spread is
 unchanged; bad ranges are refused; a batched run at 0.85–1.15 never enters rock and redraws
 the factor at auto-reset.
+
+## Step 7 — Full environment speed benchmark
+
+`scripts/bench_env.py` times the whole `MatchEnv.step` with random actions: decoding actions,
+the engine, visibility, observations, stats and auto-reset. `--state` adds a `get_state()`
+call per step (a centralized critic needs it); `--processes` runs independent processes at
+once. There is no timing test: the laptop's load swings, so it would fail at random (as P28).
+
+One process on the Apple M4, load average about 5, with `--state` (match steps per second):
+
+| Format | 16 matches | 64 | 256 | 1024 |
+|---|---|---|---|---|
+| 1v1 | 6,100 | 16,400 | 35,000 | 52,900 |
+| 2v2 | 4,400 | 11,500 | 20,400 | 24,100 |
+
+At 256 matches visibility takes 45–47% of the time, observations 25%, the engine 23–24%,
+`get_state` 2% and everything else (actions, memory, stats, resets) about 2%. Below 64 matches
+Python overhead per call dominates; at 1,024 the gain flattens while each step takes 19–42 ms.
+
+Independent processes, 256 matches each (load average 5 at the start, 33 at the end, so rough):
+
+| Processes | 1 | 2 | 4 | 8 |
+|---|---|---|---|---|
+| 1v1 total | 37,600 | 65,300 | 87,900 | 127,900 |
+| 2v2 total | 16,900 | 27,200 | 43,100 | 47,200 |
+
+Two processes nearly double the rate; beyond the 4 performance cores, the efficiency cores and
+other apps add less.
+
+**Against the learner.** A 2 × 256 actor and critic forward pass (numpy stand-in, as PyTorch
+isn't installed here) costs about 2.2 µs per agent; a PPO update of 4 epochs, forward and
+backward, roughly 26 µs per sample. The 1v1 env at 256 matches costs about 14 µs per agent
+step. So in one process the env and the learner take about equal time, and end to end
+roughly 15,000–20,000 training samples per second is expected, about 100 million in 1.5–2
+hours. Phase 5 measures the real figure with PyTorch.
+
+**Choices (I18):**
+- **No speed-up now.** With env and learner about equal, doubling env speed would gain at
+  most 1.5× overall. If Phase 5 shows the env is the bottleneck, the first step is a cheap,
+  exact numpy change (skip the corner rays once a target is seen); a compiled ray caster
+  (numba) only after that.
+- **One process** (Team B's R12) with **256 matches per batch in 1v1 and 128 in 2v2**: past
+  the Python-overhead range, steps stay under about 10 ms, and a 128-step rollout is 65,536
+  samples in 1v1. Multiple env processes only if Phase 5 shows the env is the bottleneck.

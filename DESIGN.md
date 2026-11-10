@@ -60,7 +60,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 4. Batched `MatchEnv` (auto-reset, events, episode stats, per-team state) — done
 5. Shared contract test (spec 0.3) and Team B migration notes — done
 6. Gravity and thrust randomization: one factor scales both, off by default — done
-7. Full environment speed benchmark
+7. Full environment speed benchmark — done
 8. PettingZoo wrapper
 
 ## Decisions
@@ -167,6 +167,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 | I15 | Episode timing | All matches in a batch start and end together | Staggering needs a shorter first match or a fake clock that distorts "time left"; bursts of stats are harmless |
 | I16 | Contract test | `tests/test_env_contract.py` on `main` for spec 0.3, built from Team B's version, run over a `FACTORIES` list; `SPECS` pins each version's sizes, stat names and observation-name fingerprint; event dtypes checked by kind | Team B's branch was built on the first draft contract; one test both sides run keeps the interface honest, and the pinned layout forces a version bump on change. The handoff guide's section 0 lists Team B's required edits; their branch is not touched |
 | I17 | Physics randomization | Per match, one factor multiplies both gravity and thrust, drawn uniformly from `PhysicsConfig.scale_range` (default (1, 1) = off, allowed [0.5, 1.5]); hidden from observations; its own random stream | Level flight depends only on thrust ÷ gravity, so tying them keeps it at 30.0 tiles (climb 33.8–36.3); independent ±15% gives 22 tiles, below the generator's 24. Hidden keeps spec 0.3 and makes policies robust; off by default because it slows early learning |
+| I18 | Env speed and batching | `scripts/bench_env.py` (full step, per-part shares, `--state`, `--processes`), no timing test; no speed-up now; one process, 256 matches per batch in 1v1 and 128 in 2v2 | Measured 35,000 (1v1) and 20,400 (2v2) match steps/s at 256 matches; visibility is 45% of it. The env costs about as much as a PPO update per sample, so doubling it gains at most 1.5×. If Phase 5 shows the env is the bottleneck: corner rays only when the centre is hidden, then numba, then more processes (2 nearly double the rate) |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

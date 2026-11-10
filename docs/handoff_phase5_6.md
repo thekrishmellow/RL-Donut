@@ -44,7 +44,7 @@ What changed, and what it means for the files on `phase5-6`:
 | Events | `stand_in.Events`, float32 damage | `rl_donut.env.MatchEvents`: same fields plus logs (`shot_log`, `death_log`, `respawn_log`); damage is float64; the contract checks kinds, not widths | `rewards.py`: cast to float32 as it already does at the end |
 | Episode stats (I14) | computed by the watchlist from the world | `info[m]["agents"]` holds per-agent totals (section 4.4); hover is airborne with vertical speed under **1** tile/s | `watchlist.py`: read `info` (its own hover rule uses 2 tiles/s) |
 | Engine rules (P19–P25) | stand-in's minimal health and timer | real health (100, regeneration after 3 s), respawn after 2 s at a spawn no enemy sees, 1 s protection ended by firing, simultaneous hits, pit falls credited to the last damager within 3 s, 60 s deathmatch | none; rewards built on events keep working |
-| Speed | stand-in | about 22,000 match steps/s at 64 matches in 1v1 on the busy laptop (Phase 3 step 7 measures it properly) | batch sizes in R12 may need revisiting |
+| Speed (I18) | stand-in | full `MatchEnv.step` in one process: 35,000 match steps/s in 1v1 and 20,400 in 2v2 at 256 matches (16,400 / 11,500 at 64); `scripts/bench_env.py` | use 256 matches per batch in 1v1 and 128 in 2v2 rather than 16–64; report PPO samples/s with machine load, which decides whether the env needs speeding up |
 
 Two scope notes:
 - Phases 7 and 8 on `phase5-6` go beyond the agreed Phases 5–6. They are welcome, but they
@@ -621,7 +621,6 @@ and updates the contract test in the same commit.
 
 | Question | Owner | Notes |
 |---|---|---|
-| Compute targets (environments, steps/s) | both, Phase 3 | The laptop is busy; report machine and load with timings |
 | Kill credit for falls (G4) | Team B, Phase 5 | Step 5.3 |
 | Final format (G3) | both, Phase 6 | Step 6.6 |
 | Grenades | Team A, Phase 2 | Draft says v2, so v1 has only the rifle |

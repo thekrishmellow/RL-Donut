@@ -211,8 +211,9 @@ Still open:
   centralized critic.
 - **Physics randomization (approved, I17):** one factor per match scales gravity and thrust
   together (level flight stays 30 tiles); off by default, hidden from agents.
-- **Speed benchmark:** environment steps per second, measured before any training. The
-  target depends on the compute decision below.
+- **Speed benchmark (approved, I18):** `scripts/bench_env.py`; 35,000 match steps/s in 1v1
+  and 20,400 in 2v2 at 256 matches in one process. No speed-up until Phase 5 shows the env
+  is the bottleneck.
 
 ### Phase 4 — Bots, renderer, replays (draft)
 
@@ -306,8 +307,11 @@ No tool in the draft or open rows is installed until its phase's discussion appr
 | Background load | Load average often 10–28 from other apps | Benchmarks must report load; timings in docs are on a busy machine |
 
 The draft PPO numbers (64 environments, ≥ 10,000 steps/s) assumed a multi-core desktop
-with a GPU. On this laptop the realistic targets are probably 16–32 environments and a
-lower step rate; Phase 3's speed benchmark decides.
+with a GPU. Phase 3's speed benchmark (I18, [`interface.md`](interface.md#step-7--full-environment-speed-benchmark))
+measured the full env in one process at 35,000 match steps/s in 1v1 and 20,400 in 2v2
+(256 matches, load average about 5). Targets: one process, 256 matches per batch in 1v1 and
+128 in 2v2; the env and a PPO update cost about the same per sample, so roughly
+15,000–20,000 training samples/s end to end is expected, to be measured in Phase 5.
 
 ### Storage layout
 
@@ -370,6 +374,5 @@ merge, the main one being a Gaussian head for the continuous aim.
 | Grenades in v1 or v2 | Phase 2 | Draft says v2 |
 | Kill credit for falls | Phase 5 | G4 |
 | PyTorch, PettingZoo, renderer, tracker, dashboard tool | Their phases | Section 6 |
-| Compute targets (environments, steps/s) | Phase 3 | Section 7 |
 | OOD split definitions | Phase 8 | M49 |
 | CI (tests on every push) | Any time; before friends join | Section 7 |
