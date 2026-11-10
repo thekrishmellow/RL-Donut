@@ -133,6 +133,7 @@ class StandInEnv:
         cfg: EngineConfig | None = None,
         match_duration_seconds: float = 60.0,
         decision_interval_ticks: int = 2,
+        custom_maps: list[GeneratedMap] | None = None,
     ):
         self.spec_version = SPEC_VERSION
         self.n_matches = n_matches
@@ -148,7 +149,10 @@ class StandInEnv:
         self.action_nvec = (3, 2, 16, 2)  # move (3), jet (2), aim (16), shoot (2)
 
         # Pre-load split maps
-        all_maps = load_split(split)
+        if custom_maps is not None:
+            all_maps = list(custom_maps)
+        else:
+            all_maps = load_split(split)
         if map_filter is not None:
             all_maps = [m for m in all_maps if map_filter(m)]
         if not all_maps:

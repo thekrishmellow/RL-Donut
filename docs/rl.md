@@ -64,6 +64,9 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | T1 | Combat style archetypes | Aggressive ($2\times$ dmg dealt), Defensive ($2\times$ dmg taken penalty), Sniper (bonus for $>15$ tiles) | Prevents strategy cycling and creates specialized agents for pool diversity. |
 | T2 | Adaptive matchmaking | Dynamically shifts selection bias $b \in [-1, 1]$ based on rolling 20-match win rate | Keeps learner win rate within optimal 50%–60% zone to maximize sample efficiency. |
 | T3 | CLI integration | Parameterized via `--style` and `--adaptive` in `scripts/train_selfplay.py` | Allows launching styled self-play runs with zero code modification. |
+| U1 | Three-tier evaluation | Train seeds (0–9,999), Val seeds (10,000–10,999), OOD (physics $\pm 25\%$ & seeds 30,000+) | Comprehensive evaluation spanning in-distribution generalization and physical robustness. |
+| U2 | Generalization gaps | $\Delta_{\text{val}} = \text{win}_{\text{train}} - \text{win}_{\text{val}}$, $\Delta_{\text{ood}} = \text{win}_{\text{train}} - \text{mean}(\text{win}_{\text{ood}})$ | Quantitative headline metrics measuring over-fitting and domain shift degradation. |
+| U3 | On-the-fly OOD generation | Seeds 30,000+ generated dynamically via `generate_map(seed)` | Tests unseen procedural terrain without modifying frozen cache files in `data/maps/`. |
 
 ---
 
@@ -277,6 +280,47 @@ Outputs detailed combat and survival metrics with statistical confidence interva
 - **Centralized Critic**: Evaluates global environment state (`env.get_state()`) across all agents.
 - **Team Reward Blending**: Blends individual agent performance with team average ($0.5 \times \text{own} + 0.5 \times \text{team\_avg}$).
 - **Parameter Sharing**: Teammates share the actor policy network while conditioning on their specific agent observation slot.
+
+
+---
+
+## Phase 7: Adaptive Opponents and Combat Styles
+
+### Behavioral Archetypes (`styles.py`)
+Defines specialized asymmetric reward configurations to diversify the opponent pool and prevent rock-paper-scissors strategy cycling:
+- **`AGGRESSIVE`**: $2\times$ damage dealt bonus ($+0.006$), higher kill bonus ($+0.5$), $2\times$ step penalty ($-0.0010$) to force proactive engagement and pursuit.
+- **`DEFENSIVE`**: $2\times$ damage taken penalty ($-0.006$), higher death penalty ($-0.5$), minimal step penalty ($-0.0002$) to encourage patient spacing, cover utilization, and retreat.
+- **`SNIPER`**: Flat bonus ($+0.004$) for landed shots exceeding 15 tiles distance, fostering long-range rifle precision and vertical control.
+
+### Dynamic Adaptive Matchmaking (`adaptive.py`)
+- **Target Win Rate Zone**: Actively regulates training difficulty so the learner maintains a 50%–60% win rate.
+- **Difficulty Bias ($b \in [-1, +1]$)**: When the learner dominates ($>60\%$), bias increases towards sampling the latest self snapshot ($p_{\text{latest}} \to 0.80$). When struggling ($<50\%$), bias shifts towards baseline bots ($p_{\text{bots}} \to 0.50$).
+- Integrated via `--adaptive` in `scripts/train_selfplay.py`.
+
+
+
+---
+
+## Phase 8: Generalization Evaluation
+
+### Evaluation Protocol (generalization.py)
+Evaluates policy models across three tiers with 50/50 side swapping and 95% Wilson confidence intervals:
+1. **In-Distribution Train**: Seeds 0–9,999 (baseline training distribution).
+2. **In-Distribution Held-Out (al)**: Seeds 10,000–10,999 (unseen maps with standard physics).
+3. **Out-of-Distribution (OOD)**:
+   - **Physics Parameter Shifts**: Gravity $\pm 25\%$ (18.75 to 31.25 tiles/s²), Jetpack Thrust $\pm 25\%$ (30.0 to 50.0 tiles/s²).
+   - **Unseen OOD Cave Maps**: Seeds 30,000+ generated on the fly via generate_map(seed).
+
+### Headline Generalization Gaps
+- **Validation Gap**: $\Delta_{\text{val}} = \text{win\_rate}_{\text{train}} - \text{win\_rate}_{\text{val}}$
+- **OOD Shift Gap**: $\Delta_{\text{ood}} = \text{win\_rate}_{\text{train}} - \text{mean\_ood\_win\_rate}$
+
+### Evaluation CLI (scripts/eval_generalization.py)
+CLI command evaluating any checkpoint across all tiers:
+\\ash
+python scripts/eval_generalization.py --checkpoint runs/<id>/ckpt_0050.pt --opponent random --n-matches 20
+\Outputs tabular per-condition win rates with Wilson intervals and saves 
+uns/<id>/generalization.json.
 
 
 ---

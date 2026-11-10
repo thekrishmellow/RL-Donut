@@ -6,6 +6,13 @@ from rl_donut.rl.checkpoints import CheckpointManager
 from rl_donut.rl.curriculum import CurriculumManager, CurriculumStage
 from rl_donut.rl.elo import EloReport, MatchResult, compute_elo_ratings, run_round_robin
 from rl_donut.rl.evaluate import EvalReport, evaluate_policy, wilson_score_interval
+from rl_donut.rl.generalization import (
+    GeneralizationReport,
+    build_ood_maps,
+    compute_generalization_gap,
+    evaluate_generalization,
+    get_ood_engine_configs,
+)
 from rl_donut.rl.mappo import CentralizedCritic, blend_team_rewards
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.pool import OpponentPool, PoolMember
@@ -27,6 +34,7 @@ __all__ = [
     "CurriculumStage",
     "EloReport",
     "Events",
+    "GeneralizationReport",
     "LearnedPolicy",
     "MatchResult",
     "OpponentPool",
@@ -48,11 +56,15 @@ __all__ = [
     "WatchlistTracker",
     "anneal_alpha",
     "blend_team_rewards",
+    "build_ood_maps",
     "compute_elo_ratings",
     "compute_gae",
+    "compute_generalization_gap",
     "compute_reward",
     "compute_styled_reward",
+    "evaluate_generalization",
     "evaluate_policy",
+    "get_ood_engine_configs",
     "run_round_robin",
     "wilson_score_interval",
 ]

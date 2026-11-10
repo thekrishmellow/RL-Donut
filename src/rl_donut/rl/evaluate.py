@@ -45,6 +45,8 @@ def evaluate_policy(
     seed: int = 10_000,
     match_duration_seconds: float = 60.0,
     map_filter=None,
+    custom_maps=None,
+    cfg=None,
 ) -> EvalReport:
     """Evaluate learner vs opponent over n_matches, swapping sides halfway."""
     # Ensure even number of matches for equal side representation
@@ -72,6 +74,8 @@ def evaluate_policy(
             seed=seed + half_idx * 1000,
             map_filter=map_filter,
             match_duration_seconds=match_duration_seconds,
+            custom_maps=custom_maps,
+            cfg=cfg,
         )
         obs = env.reset()
         M, A = env.n_matches, env.n_agents
