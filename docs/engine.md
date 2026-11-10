@@ -24,8 +24,8 @@ The map generator assumed these when it decided which maps are valid. Each one b
 | Step | Status | Code |
 |---|---|---|
 | 1. World and state model | done | `src/rl_donut/env/config.py`, `src/rl_donut/env/state.py` |
-| 2. Tile collision | next | — |
-| 3. Movement, jetpack and fuel | planned | — |
+| 2. Tile collision | done | `src/rl_donut/env/collision.py` |
+| 3. Movement, jetpack and fuel | next | — |
 | 4. Route check | planned | — |
 | 5. Aiming and hitscan rifle | planned | — |
 | 6. Health, death and respawn | planned | — |
@@ -120,3 +120,87 @@ Physics constants are added in step 3, when they are decided.
 - `reset` restarts only the chosen matches;
 - `AgentView` reads one agent;
 - maps of different sizes can't share a batch.
+
+---
+
+## Step 2: Tile collision (`collision.py`)
+
+Each tick, every living agent tries to move by its velocity × the tick length. Collision
+decides how far it really gets without its hitbox entering rock.
+
+### One axis at a time
+
+`move(world, dt)` moves every agent horizontally first, then vertically. On each axis:
+
+1. Move the box to its target position.
+2. Find the column (or row) that the box's **leading edge** is now in, for example the
+   right edge when moving right.
+3. If any tile in that column, across the rows the box spans, is rock, snap the box back
+   so its edge sits exactly on that tile's edge, and set its speed on this axis to 0.
+
+**Why checking one line is enough.** Nothing moves a full tile in one tick (the wall
+promise), so the leading edge can enter at most one new column or row per tick, and the box
+was clear before it moved. `move` refuses any move of a full tile or more with a
+`ValueError` instead of silently letting an agent pass through a wall. Step 3 must choose
+speed limits that keep this true.
+
+**Why horizontal first.** It's the usual platformer order, and resolving vertical motion
+last means the final position decides whether the agent is standing. The order only
+matters when a box clips a corner diagonally, and then by less than one tick of motion.
+
+**Alternatives considered.** An exact sweep (finding the moment the box first touches any
+tile) is slightly more accurate at corners but much harder to write for many matches at
+once. Small sub-steps are simple but cost several times as much and still aren't exact.
+
+### Touching is not overlapping
+
+A box whose right edge is exactly at x = 21 does not touch column 21, so an agent pressed
+against a wall can still slide along it, and an agent on a floor can run along it.
+Snapped positions such as `21 − 0.4` are not exact in binary floating point, so tile
+ranges are computed with a tolerance (`EPS` = 1e-9 tiles).
+
+### Standing (`on_ground`)
+
+An agent is standing when its feet are on a tile edge (within 1e-6) and any tile directly
+under its hitbox is rock. It's computed from the position alone, so it is correct right
+after a reset or respawn, and for an agent standing still. The alternative, a flag set
+when a fall was blocked, would be wrong on the tick after a spawn and whenever gravity is 0.
+
+### Outside the map
+
+- Left, right and top: solid, like the border (M16).
+- Below the bottom edge: air. The bottom border row is solid except at pits, so pits are
+  the only way down there; the agent falls until it passes the kill line (step 6 kills it).
+  An agent that falls through a pit and flies back up before the kill line can re-enter
+  through the same pit.
+
+### Agents pass through each other
+
+Agents don't collide with each other, as in Mini Militia. Solid bodies would let agents
+block doorways or push each other into pits, which RL would quickly learn to exploit.
+Bullets still hit agents (step 5).
+
+### Checking our own work
+
+`overlaps_rock(world)` checks every tile under every hitbox by brute force. Tests use it
+to confirm the fast leading-edge check never misses anything.
+
+**Picture:** `scripts/preview_world.py --trace 900` moves agents with random velocities
+through the collision code and draws their paths: they stop flat on floors and ceilings and
+slide along walls.
+
+**Tests** (`tests/test_collision.py`):
+
+- outside-the-map rules;
+- falling agents land exactly on the floor; rising ones stop exactly at the ceiling;
+- a wall stops horizontal speed only;
+- an agent touching a wall can slide along it and leave it; running along a floor isn't blocked;
+- 300 ticks of repeated landing don't drift off the edge;
+- everyone stands after a reset; a hovering agent doesn't;
+- dead agents neither move nor stand;
+- falling through a pit goes below the map;
+- moving a full tile in one tick is refused;
+- on 40 val maps, 600 ticks of random motion with 1 and 2 agents per team never enter rock
+  (and agents really do hit floors, walls and ceilings: about 12,000 contacts per run);
+- a move is blocked exactly when the unblocked target would overlap rock, compared with
+  the brute-force check over more than 10,000 moves.

@@ -62,7 +62,7 @@ tooling, `M` map generator; later phases add their own letters).
 |---|---|---|---|
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
-| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (step 1 done, step 2 next) |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–2 done, step 3 next) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |

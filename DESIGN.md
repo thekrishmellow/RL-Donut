@@ -42,8 +42,8 @@ later phases, infrastructure, open decisions) is in [`docs/PLAN.md`](docs/PLAN.m
 Each step ends with a test or picture; its decisions are discussed when it starts.
 
 1. World and state model — done
-2. Tile collision — next
-3. Movement, jetpack and fuel (climb and < 1 tile per tick contracts)
+2. Tile collision — done
+3. Movement, jetpack and fuel (climb and < 1 tile per tick contracts) — next
 4. Route check: a scripted bot flies generator routes on many seeds (M4b), before shooting,
    because a failure here changes the generator
 5. Aiming and hitscan rifle (uses `geometry.line_of_sight`, M40)
@@ -113,6 +113,10 @@ Each step ends with a test or picture; its decisions are discussed when it start
 | P1 | Engine state layout | numpy arrays of shape (matches, agents) covering many matches at once; `World.single` and `World.agent` for tests and debugging | Measured: ~470,000 ticks/s for 64 matches together vs ~48,000 for Python objects and ~12,000 for single-match arrays (numpy's ~1 µs per call dominates small arrays); this laptop is usually loaded, so multiple processes scale poorly; switching later means a rewrite. numba kept as a fallback (new dependency, version-sensitive) |
 | P2 | Coordinates | Continuous tile units, y downward, position = hitbox centre, float64 | Tile lookup is `grid[floor(y), floor(x)]`; mirroring is `width - x`; aim starts at the centre; float64 keeps replays exact |
 | P3 | Start positions | Agent `i` of each team starts on spawn `i` of its team; team A slots first | Spawns are mirrored, so every match starts as an exact mirror image; respawn selection is decided in step 2.6 |
+| P4 | Collision method | One axis at a time, horizontal then vertical; check only the tiles the leading edge enters; snap to the tile edge and zero that axis's speed; `move` refuses moves of a full tile or more | Exact given < 1 tile per tick (M16); cheap for many matches at once. An exact sweep is harder to batch for at most one tick of difference at corners |
+| P5 | Standing | Feet on a tile edge (within 1e-6) with rock under the hitbox, computed from position | Correct right after reset or respawn and when standing still; a "fall was blocked" flag would not be |
+| P6 | Outside the map | Left, right and top solid; below the bottom edge is air | Matches the border (M16); the bottom border is solid except at pits, so pits are the only way down |
+| P7 | Agent-agent collision | None; agents pass through each other | As in Mini Militia; solid bodies would allow doorway blocking and pushing into pits |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits
