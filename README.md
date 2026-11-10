@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Next: Phase 3 (RL interface).
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) in progress: action space done.
 
 ## Documentation
 
@@ -14,6 +14,7 @@ self-play, and are evaluated on maps they have never seen.
 | [`DESIGN.md`](DESIGN.md) | Project phases and the decision log (every choice, with its reason) |
 | [`docs/mapgen.md`](docs/mapgen.md) | How the map generator works, step by step, with code and the reasoning behind it |
 | [`docs/engine.md`](docs/engine.md) | How the game engine works, step by step, and the promises it keeps to the map generator |
+| [`docs/interface.md`](docs/interface.md) | The RL interface: actions, observations, the batched environment, with the measurements behind each choice |
 | [`docs/handoff_phase5_6.md`](docs/handoff_phase5_6.md) | For the teammate building Phases 5–6: what exists, the interface contract, every step and decision, the merge checklist |
 
 ## Setup
@@ -42,6 +43,7 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/preview_rifle.py --count 3            # fans of rifle shots on real maps -> outputs/rifle_preview.png
 .venv/bin/python scripts/view_match.py --team-size 2 --close   # watch a match: outputs/match.gif and a filmstrip outputs/match.png
 .venv/bin/python scripts/bench_engine.py                       # engine speed by batch size, split by component
+.venv/bin/python scripts/aim_ceiling.py                        # best possible hit rate of each aim design on real maps
 ```
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
@@ -56,11 +58,13 @@ RL-Donut/
 ├── docs/PLAN.md               Whole-project plan and technical design
 ├── docs/mapgen.md             Map generator guide
 ├── docs/engine.md             Game engine guide
+├── docs/interface.md          RL interface guide
 ├── docs/handoff_phase5_6.md   Phases 5–6 handoff: contract, steps, merge plan
 ├── requirements.txt           Pinned dependencies
 ├── pyproject.toml             Package + pytest config
 ├── src/rl_donut/
-│   ├── env/                   Phase 2: game engine (many matches per batch)
+│   ├── env/                   Phase 2: game engine (many matches per batch); Phase 3: RL interface
+│   │   ├── actions.py         Action layout (3 discrete parts + continuous aim) and decode to engine controls
 │   │   ├── config.py          EngineConfig and its parts: physics, rifle, life, match settings
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
@@ -94,6 +98,7 @@ RL-Donut/
 │   ├── preview_rifle.py
 │   ├── view_match.py          Debug viewer: one match as a GIF and a filmstrip
 │   ├── bench_engine.py        Engine speed check
+│   ├── aim_ceiling.py         Hit-rate ceiling of each aim design
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
 ├── map_cache/                 Resumable build chunks (git-ignored)

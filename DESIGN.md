@@ -50,6 +50,19 @@ Each step ends with a test or picture; its decisions are discussed when it start
 7. Match loop: tick order, timer, scoring, action repeat, event log; determinism test — done
 8. Debug viewer (script only) and engine speed check — done
 
+### Phase 3 steps
+
+Guide: [`docs/interface.md`](docs/interface.md).
+
+1. Action space: discrete move, jetpack, shoot + continuous aim — done
+2. Visibility (what each agent can see)
+3. Observations
+4. Batched `MatchEnv` (auto-reset, events, episode stats)
+5. Shared contract test
+6. Gravity and thrust randomization
+7. Full environment speed benchmark
+8. PettingZoo wrapper
+
 ## Decisions
 
 | # | Decision | Choice | Why |
@@ -137,6 +150,8 @@ Each step ends with a test or picture; its decisions are discussed when it start
 | P26 | New maps mid-batch | `World.load_maps(matches, maps)` swaps maps into chosen matches and restarts only those | Phase 3 can restart a finished match on a new map while the batch plays on |
 | P27 | Debug viewer | `scripts/view_match.py`: matplotlib, saves a GIF and a filmstrip PNG, simple scripted fighters | No new dependency (Pillow comes with matplotlib); pictures drop into docs. A live window or real renderer is Phase 4's decision |
 | P28 | Engine speed check | `scripts/bench_engine.py`, results in `docs/engine.md`, no timing assertion in tests; bar ≥ 50,000 match decision steps/s at 64 matches 1v1 | The laptop's load swings, so timing tests would fail at random. Measured 73,700 (1v1) and 55,200 (2v2) at 64 matches; the per-shot Python rifle is 25–59% of the time and the first thing to speed up |
+| I1 | Aim action | One continuous angle in radians, any real number, never clipped or wrapped; PPO samples it from a Gaussian head | A perfect aimer limited to 16 fixed directions hits 46% of shots at real engagement distances (median 10.8 tiles), 32 → 71%, 64 → 88%, 128 → 95%, continuous → 98% (`scripts/aim_ceiling.py`). Aim relative to the nearest seen enemy was rejected for now: it builds targeting into the action. It stays the fallback if aiming learns too slowly |
+| I2 | Action layout | Discrete move (left / none / right), jetpack (off / on), shoot (no / yes) as `(3, 2, 2)`, plus the aim; `env.actions.decode` turns them into `match_step` inputs | The discrete parts were already approved in the plan; one decode function keeps Team B's stand-in and the real env identical. Handoff `spec_version` 0.1 |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

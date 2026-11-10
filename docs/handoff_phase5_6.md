@@ -182,15 +182,33 @@ class MatchEnv:                      # rl_donut.env.MatchEnv (Team A) / rl_donut
     n_agents: int                    # 2 (1v1) or 4 (2v2), team A first
     team: np.ndarray                 # (n_agents,) 0 = team A, 1 = team B
     obs_dim: int                     # length of one agent's observation vector
-    action_nvec: tuple[int, ...]     # sizes of the action parts, e.g. (3, 2, 16, 2)
-    spec_version: str                # bumped whenever observations, actions or events change
+    action_nvec: tuple[int, ...]     # sizes of the discrete action parts: (3, 2, 2) = move, jetpack, shoot
+    action_cont_dim: int             # number of continuous action parts: 1 = aim angle in radians
+    spec_version: str                # "0.1"; bumped whenever observations, actions or events change
 
     def __init__(self, n_matches: int, team_size: int = 1, split: str = "train",
                  seed: int = 0, map_filter=None, cfg=None): ...
     def reset(self) -> np.ndarray: ...                       # obs (n_matches, n_agents, obs_dim) float32
-    def step(self, actions: np.ndarray) -> StepResult: ...   # actions (n_matches, n_agents, len(action_nvec)) int64
+    def step(self, discrete: np.ndarray, continuous: np.ndarray) -> StepResult: ...
+        # discrete (n_matches, n_agents, len(action_nvec)) int64, continuous (n_matches, n_agents, action_cont_dim) float32
     def get_state(self) -> np.ndarray: ...                   # (n_matches, state_dim) float32, for a centralized critic (2v2)
 ```
+
+**Actions (decided in Phase 3, I1–I2).** The action is **mixed**: three discrete parts and
+one continuous aim angle. `rl_donut.env.actions` holds the layout and `decode`/`encode`.
+
+| Part | Kind | Values |
+|---|---|---|
+| move | discrete, 3 | 0 = left, 1 = none, 2 = right |
+| jetpack | discrete, 2 | 0 = off, 1 = on |
+| shoot | discrete, 2 | 0 = no, 1 = yes |
+| aim | continuous, 1 | radians, any real number (0 = right, π/2 = down); never clipped or wrapped, because the engine only uses its cosine and sine |
+
+The aim is continuous because a perfect aimer limited to the plan's 16 fixed directions could hit
+only 46% of shots at real engagement distances; continuous aim allows 98%
+(`scripts/aim_ceiling.py`, table in `docs/interface.md`). For PPO this means one Gaussian head
+(a mean from the network and a learned log standard deviation) next to the categorical heads;
+the log-probability of an action is the sum over the four parts.
 
 ```python
 @dataclass
@@ -243,8 +261,8 @@ policy) has the same interface, so the trainer can mix them freely:
 ```python
 class Policy(Protocol):
     name: str
-    def act(self, obs: np.ndarray, ctx: PolicyContext) -> np.ndarray: ...
-        # obs (n, obs_dim) -> actions (n, len(action_nvec))
+    def act(self, obs: np.ndarray, ctx: PolicyContext) -> tuple[np.ndarray, np.ndarray]: ...
+        # obs (n, obs_dim) -> discrete (n, len(action_nvec)) int64, continuous (n, action_cont_dim) float32
 
 @dataclass
 class PolicyContext:
@@ -316,17 +334,16 @@ Build: `rl_donut.rl.stand_in.StandInEnv` following section 4, plus
   (`World.load_maps`).
 - Observations: a simple version of the Phase 3 draft (self state, relative enemy position
   if in line of sight, a few rays). Keep it behind one function so it's easy to delete.
-- Actions: `(3, 2, A, 2)`, move, jetpack, aim, shoot, with the aim part size `A`
-  configurable (see the aim decision below).
+- Actions: the real mixed layout of section 4.1. Use `rl_donut.env.actions.decode` to turn
+  them into `match_step` inputs, so the stand-in and the real env read actions identically.
 
 Decisions:
 - **How faithful the stand-in should be.** Recommended: reuse real physics and rifle, keep
   everything else minimal; the point is a working pipeline, not tuned results.
-- **Aim (affects both teams).** The plan's 16 fixed aim directions are 22.5° apart, but a
-  hitbox 10 tiles away spans only about 4.6°, so most shots would miss whatever the agent
-  learns. Phase 3 decides between finer directions, aim relative to the nearest visible
-  enemy, and continuous aim. Team B should make PPO handle **any `action_nvec`**, and
-  ideally keep a continuous (Gaussian) head possible, and share what works in the stand-in.
+- **Aim is decided (I1): one continuous angle.** Team B's PPO needs a Gaussian head for it
+  (step 5.4). If learning to aim proves too slow, report it: the fallback Team A would
+  consider is aiming relative to the direction of the nearest visible enemy, which keeps
+  the same action layout.
 
 ### Step 5.3 — Reward function
 
@@ -352,7 +369,9 @@ Build: `rl_donut.rl.ppo`, a single-file CleanRL-style implementation (we need cu
 opponent logic, so a library like Stable-Baselines3 would get in the way), and its tests.
 
 Draft:
-- Shared MLP 2 × 256 with one categorical head per action part, and a separate value network.
+- Shared MLP 2 × 256 with one categorical head per discrete action part and one Gaussian
+  head for the aim (state-independent learned log standard deviation, CleanRL style), and a
+  separate value network.
 - 64 environments × 256 steps per update, 8 minibatches × 4 epochs.
 - Learning rate 3e-4 decaying to 0, γ 0.99, GAE λ 0.95, clip 0.2.
 - Entropy 0.01 → 0.001, value coefficient 0.5, gradient clip 0.5.
@@ -364,6 +383,9 @@ Decisions:
 - **Time-limit handling** (section 4.1): treat match end as termination, or bootstrap from
   `final_obs`.
 - **Advantage and value normalization**, observation clipping.
+- **Aim head details.** Initial log standard deviation (about 0.5 rad is a wide start), and
+  whether to sample the raw angle or squash it; no squashing is needed for correctness,
+  since any real angle is valid.
 
 Tests: learns toy tasks written in numpy (a bandit, a "walk to the goal" grid) in seconds;
 loss and KL are finite; the same seed gives the same run on CPU; a saved checkpoint
@@ -473,7 +495,7 @@ Decide 1v1, 2v2 or both for the rest of the project, based on 6.4 and 6.5 result
 | Need | From | By when | Fallback |
 |---|---|---|---|
 | Confirmation of section 4's shape | both | before step 5.2 | — |
-| Aim action design | Team A (Phase 3), with Team B's stand-in results | Phase 3 | PPO handles any `action_nvec` |
+| Aim action design | Team A (Phase 3) | done: continuous angle (I1) | — |
 | `get_state()` contents | Team A, agreed with Team B | Phase 3 | IPPO without a centralized critic |
 | Real `MatchEnv` | Team A | end of Phase 3 | the stand-in |
 | Scripted bots (turret, rusher) | Team A | end of Phase 4 | Team B's random and static-target bots |
@@ -509,7 +531,6 @@ and updates the contract test in the same commit.
 
 | Question | Owner | Notes |
 |---|---|---|
-| Aim action | Team A, Phase 3 | See step 5.2 |
 | Gravity and thrust randomization | Team A, Phase 3 | ±15% on both breaks the generator's level-flight assumption (22 tiles vs 24); ranges must be narrowed or tied |
 | Compute targets (environments, steps/s) | both, Phase 3 | The laptop is busy; report machine and load with timings |
 | Kill credit for falls (G4) | Team B, Phase 5 | Step 5.3 |

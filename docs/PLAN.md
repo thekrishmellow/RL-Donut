@@ -189,9 +189,10 @@ Still open:
 
 ### Phase 3 — RL interface (draft)
 
-- **Actions:** `MultiDiscrete([3, 2, 16, 2])`: move (left / none / right), jetpack
-  (off / on), aim (16 directions), shoot (no / yes). The 16 aim directions are too coarse
-  to hit at range and must be revisited (open decisions).
+- **Actions (approved, I1–I2):** discrete move (left / none / right), jetpack (off / on)
+  and shoot (no / yes), plus one continuous aim angle in radians (a Gaussian head in PPO).
+  Continuous aim allows 98% of perfectly aimed shots to hit at real engagement distances,
+  against 46% for 16 fixed directions.
 - **Observations (~150 numbers, egocentric, normalized):**
   - self: health, ammo, fuel, velocity, on-ground, reloading, cooldown, aim sin/cos, direction last hit from;
   - 24 rays: distance and hit type (wall / enemy / ally / nothing);
@@ -354,7 +355,6 @@ interface between them, the step list and the merge checklist are in
 | Final format: 1v1, 2v2 or both | Phase 6 | G3 |
 | Grenades in v1 or v2 | Phase 2 | Draft says v2 |
 | Gravity and thrust randomization ranges | Phase 3 | Must keep the climb and level-flight contracts (P11) |
-| Aim action | Phase 3 | 16 fixed directions are 22.5° apart, but a hitbox 10 tiles away spans about 4.6°, so most targets can't be hit. Options: finer directions, aim relative to the nearest seen enemy, or continuous aim. The engine takes any angle (P17) |
 | Kill credit for falls | Phase 5 | G4 |
 | PyTorch, PettingZoo, renderer, tracker, dashboard tool | Their phases | Section 6 |
 | Compute targets (environments, steps/s) | Phase 3 | Section 7 |
