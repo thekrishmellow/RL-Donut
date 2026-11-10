@@ -20,8 +20,8 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 |---|---|---|
 | **5.1** | **done** | Tools, PyTorch pin, and Team B guide (`docs/rl.md`) |
 | **5.2** | **done** | Stand-in environment (`StandInEnv`) and contract test (`tests/test_env_contract.py`) |
-| **5.3** | next | Reward function and shaping (`rl_donut.rl.rewards`) |
-| **5.4** | planned | PPO implementation (`rl_donut.rl.ppo`) |
+| **5.3** | **done** | Reward function and shaping (`rl_donut.rl.rewards`) |
+| **5.4** | next | PPO implementation (`rl_donut.rl.ppo`) |
 | **5.5** | planned | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
 | **5.6** | planned | Logging, exploit watchlist, checkpoint manager |
 | **5.7** | planned | Curriculum (static target → turret → rusher → pits) |
@@ -43,6 +43,9 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | R2 | Experiment tracking | Pure local `runs/<id>/metrics.jsonl` | Self-contained, zero cloud credentials or third-party service dependencies, works offline, and directly powers the Phase 9 dashboard. Optional lightweight terminal summary each update. |
 | R3 | Stand-in fidelity | Reuse real `World`, `physics_tick`, and `line_of_sight`; minimal health & timer rules | Gives accurate flight and collision mechanics without waiting for Team A's respawn/match loops. The stand-in is purely a scaffold for training pipeline development. |
 | R4 | Action space flexibility | `action_nvec = (3, 2, A, 2)` with configurable aim bins `A` (default 16) | PPO multi-head actor handles any discrete action dimensions dynamically, enabling experimentation with finer aim angles or enemy-relative targeting. |
+| R5 | Shaping weights & scale | Kill +0.3, death -0.3, dmg ±0.003, step penalty -0.0005 | Keeps dense shaping over an entire match bounded around ±1.0, properly balancing the sparse ±1.0 win/loss signal. |
+| R6 | Shaping schedule | Linear decay of $\alpha$ from 1.0 to 0.1 over the first 60% of training | Promotes dense reward-driven exploration early while transitioning to pure win/loss optimization as policies mature. |
+| R7 | Fall penalty | Suicide / falling into a pit incurs an extra -0.3 penalty | Teaches fuel preservation and pit avoidance early before combat competence develops. |
 
 ---
 
@@ -113,3 +116,25 @@ Built in `src/rl_donut/rl/stand_in.py`, the environment provides the exact batch
 4. Auto-reset behavior preserving `final_obs`.
 5. Combat event consistency (hits $\le$ shots, non-negative damage).
 6. Non-zero outcomes only occurring upon match completion.
+
+
+---
+
+## Step 5.3: Reward Function & Shaping
+
+### Formulation
+The total reward for an agent on decision step $t$ is:
+$$r_t = r_{\text{sparse}} + \alpha \cdot r_{\text{shaping}}$$
+
+1. **Sparse Outcome ($r_{\text{sparse}}$)**:
+   - Evaluated only when a match completes: $+1.0$ for winning team, $-1.0$ for losing team, $0.0$ for draw.
+   - Zero during intermediate steps.
+2. **Dense Shaping ($r_{\text{shaping}}$)**:
+   - Kill bonus: $+0.3$
+   - Death penalty: $-0.3$
+   - Damage dealt: $+0.003$ per health point ($100\,\text{dmg} = +0.3$)
+   - Damage taken: $-0.003$ per health point
+   - Step penalty: $-0.0005$ per decision step (discourages stalling)
+   - Fall penalty: $-0.3$ when agent dies by falling into a bottom pit.
+3. **Annealing ($\alpha$)**:
+   - $\alpha$ decays linearly from $1.0$ down to $0.1$ over the first 60% of training steps.
