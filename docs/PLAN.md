@@ -62,7 +62,7 @@ tooling, `M` map generator; later phases add their own letters).
 |---|---|---|---|
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
-| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–3 done, step 4 next) |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–4 done, step 5 next) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
@@ -130,7 +130,7 @@ Rules that keep the pieces independent:
 | `MapConfig.climb_budget = 12`: the engine must climb at least 12 tiles on one tank | M26 | engine test | approved |
 | Fastest motion < 1 tile per tick, so 1-tile walls can't be skipped | M16 | engine test | approved |
 | Hitscan uses `mapgen.geometry.line_of_sight`, so "can't see" = "can't be shot" | M40 | engine | approved |
-| Scripted bot reaches ≥ 99% of random route targets | M4b | engine test | approved |
+| Scripted bot reaches ≥ 99% of random route targets | M4b | engine test | approved, passes (99.80%, P14) |
 | Env API: `reset(seed)`, `step(actions: dict[agent_id, ndarray])` in PettingZoo parallel form, `get_state()` | — | RL, replays | draft |
 | Replay file `.json.gz`: `{seed, config, map, ticks: [{agents, shots, events}]}` | — | dashboard | draft |
 | Metrics: `runs/<id>/metrics.jsonl` (optionally mirrored to an experiment tracker) | — | dashboard | draft |
@@ -174,7 +174,8 @@ Required tests, from Phase 1 contracts: climb at least `climb_budget` on one tan
 
 Resolved so far: the draft had no rising-speed limit (1.27 tiles per tick, breaking M16)
 and left level flight only 2% above the generator's assumption; fixed by P8. Climb and
-level-flight contracts pass with 35.7 and 30.0 tiles.
+level-flight contracts pass with 35.7 and 30.0 tiles. The route check passes: 99.80% of
+2,000 routes arrive with a full tank before each hop (P12–P14).
 
 Still open:
 

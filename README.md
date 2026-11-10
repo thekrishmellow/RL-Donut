@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): steps 1–3 of 8 done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): steps 1–4 of 8 done.
 
 ## Documentation
 
@@ -37,6 +37,7 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/build_maps.py --split val --workers 8 # (re)build a split -> data/maps/ (resumable)
 .venv/bin/python scripts/preview_world.py --count 4            # engine worlds: agents and spawns -> outputs/world_preview.png (--trace N: random-motion paths)
 .venv/bin/python scripts/preview_physics.py                    # one tank's flight paths vs the generator's needs -> outputs/physics_preview.png
+.venv/bin/python scripts/route_check.py                        # route bot flies 2,000 generator routes; failures -> outputs/route_failures.png
 ```
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
@@ -58,7 +59,8 @@ RL-Donut/
 │   │   ├── config.py          EngineConfig and PhysicsConfig: team size, tick rate, hitbox, physics constants
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
-│   │   └── physics.py         One tick: controls, gravity, jetpack, speed limits, fuel
+│   │   ├── physics.py         One tick: controls, gravity, jetpack, speed limits, fuel
+│   │   └── navigation.py      Route planner on the generator's flight model, and a bot that flies it
 │   └── mapgen/                Phase 1: procedural maps
 │       ├── seeding.py         Master seed -> independent named random streams
 │       ├── generator.py       Pipeline entry point: generate_map(seed) -> GeneratedMap
@@ -80,6 +82,7 @@ RL-Donut/
 │   ├── preview_maps.py
 │   ├── preview_world.py
 │   ├── preview_physics.py
+│   ├── route_check.py
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
 ├── map_cache/                 Resumable build chunks (git-ignored)

@@ -26,8 +26,8 @@ The map generator assumed these when it decided which maps are valid. Each one b
 | 1. World and state model | done | `src/rl_donut/env/config.py`, `src/rl_donut/env/state.py` |
 | 2. Tile collision | done | `src/rl_donut/env/collision.py` |
 | 3. Movement, jetpack and fuel | done | `src/rl_donut/env/physics.py`, `src/rl_donut/env/config.py` |
-| 4. Route check | next | — |
-| 5. Aiming and hitscan rifle | planned | — |
+| 4. Route check | done | `src/rl_donut/env/navigation.py`, `scripts/route_check.py` |
+| 5. Aiming and hitscan rifle | next | — |
 | 6. Health, death and respawn | planned | — |
 | 7. Match loop | planned | — |
 | 8. Debug viewer and speed check | planned | — |
@@ -295,3 +295,81 @@ against the generator's needs.
 - 900 ticks of random play with 2 agents per team on 40 val maps never enter rock, never
   exceed a tile per tick and keep fuel in range;
 - the same controls give the same trajectory, bit for bit.
+
+---
+
+## Step 4: Route check (`navigation.py`)
+
+The generator called a map valid because its flight model (M27) found routes between the
+floors. This step checks that claim under real physics: a scripted bot flies random routes
+and at least 99% must arrive (M4b).
+
+### Planning: the generator's own flights
+
+`Navigator` rebuilds the generator's model for one map: the floor segments, which segment
+reaches which on one tank, and the fuel cost of every clearance-box position from each
+segment. A route is flown **hop by hop**: find the next segment on a fewest-hops route to
+the goal, trace the cheapest chain of box positions to a landing on it, fly it, land, and
+plan again from wherever the bot actually landed.
+
+**Why the generator's model, not a search over real physics.** A cleverer search would find
+flights the generator never relied on, and could pass a map whose model was wrong. Flying
+the model's own paths tests the claim itself.
+
+**Falls first.** Tracing a path back from the landing, the planner prefers falling over
+sideways steps over climbing. Among equally cheap flights this picks the one that drops
+onto the landing floor. The model charges nothing for falling, but a fall that ends in
+mid-air (turning sideways over a pit) costs real fuel to brake, roughly 9√H fuel after a
+fall of H tiles.
+
+### Flying: a simple controller
+
+`RouteBot.decide` is called every 2 ticks, like an agent:
+
+- **Where to aim:** the end of the current straight run of boxes; on the take-off floor,
+  the standing height, in the air, the middle of each box. (Aiming at the landing height
+  itself left the feet a hair below a step's top edge, hovering forever.)
+- **Left or right:** towards the target, within 0.1 tiles.
+- **Thrust:** when below the target, or when the current vertical speed would carry the
+  bot past it (stopping distance: gravity stops a rise, thrust minus gravity stops a fall).
+  No thrust on the final drop onto the landing floor.
+- **Refuelling:** on the ground, the bot stands still, neither walking nor thrusting, until
+  the tank holds the fuel for the next hop. Allowing it to walk meant it walked off ledges
+  with 2–15 fuel. That caused most falls and the looping timeouts.
+
+### The rule and the result
+
+2,000 routes on 200 val maps, start and goal on different main floor segments, 60 s per
+route, pits included; the bot waits for a full tank before every hop:
+
+| Controller | Arrived |
+|---|---|
+| First version (aiming at standing height) | 53% (150 routes) |
+| Aim at box centres, brake by stopping distance | 97.70% |
+| Plan falls first | 98.55% |
+| Stand still while refuelling (final) | **99.80%** |
+
+Taking off with just enough fuel for each hop (plus 10% of the tank) gives 99.45%.
+
+The 4 remaining failures: 3 falls on hops costing 21–24 of the model's 24 units, each
+with 20+ tiles of sideways flight before the drop, which run dry on the last stretch; and
+1 18-hop route that loops without settling on its goal floor. Dropping earlier and flying
+sideways lower would probably save the falls; that is controller work, not a generator
+problem.
+
+Lowering the falling limit (20, 15 or 12 tiles/s) changed nothing, so braking from full
+falling speed was not the main fuel sink.
+
+**Picture:** `scripts/route_check.py` flies all 2,000 routes and draws every failure (red =
+planned, blue = flown, green = goal floor) to `outputs/route_failures.png`.
+
+**Tests** (`tests/test_routes.py`, 150 routes on 30 val maps):
+
+- sampled routes join different main segments, and sampling is seeded;
+- following `next_segment` always reaches the goal;
+- every hop is a chain of one-box steps through clearance boxes, ending on the target
+  floor, and its steps' model costs add up to the landing's cost, within one tank;
+- a grounded bot short of fuel stands still;
+- `standing_box` finds the spot under an agent standing on it;
+- ≥ 99% of routes arrive, with a full tank before each hop;
+- the same routes give the same results, bit for bit.
