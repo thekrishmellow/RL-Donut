@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) in progress: action space and visibility done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) in progress: action space, visibility and observations done.
 
 ## Documentation
 
@@ -46,6 +46,7 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/aim_ceiling.py                        # best possible hit rate of each aim design on real maps
 .venv/bin/python scripts/preview_visibility.py                 # what one agent sees of enemies at every spot -> outputs/visibility_preview.png
 .venv/bin/python scripts/bench_engine.py --visibility          # engine speed including visibility
+.venv/bin/python scripts/preview_observation.py                # one observation drawn -> outputs/observation_preview.png
 ```
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
@@ -69,6 +70,7 @@ RL-Donut/
 │   │   ├── actions.py         Action layout (3 discrete parts + continuous aim) and decode to engine controls
 │   │   ├── raycast.py         Thousands of exact lines of sight at once (numpy grid walk)
 │   │   ├── visibility.py      Who sees whom: centre or hitbox corners in sight, team sight
+│   │   ├── observe.py         Observations: 57 named numbers + tile window, memory, team B mirrored
 │   │   ├── config.py          EngineConfig and its parts: physics, rifle, life, match settings
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
@@ -104,6 +106,7 @@ RL-Donut/
 │   ├── bench_engine.py        Engine speed check
 │   ├── aim_ceiling.py         Hit-rate ceiling of each aim design
 │   ├── preview_visibility.py  Visibility picture
+│   ├── preview_observation.py Observation picture
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
 ├── map_cache/                 Resumable build chunks (git-ignored)

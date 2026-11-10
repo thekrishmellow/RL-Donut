@@ -56,7 +56,7 @@ Guide: [`docs/interface.md`](docs/interface.md).
 
 1. Action space: discrete move, jetpack, shoot + continuous aim — done
 2. Visibility: batched exact ray caster, who sees whom, team sight — done
-3. Observations
+3. Observations: 57 named numbers + 21 × 13 tile grid, mirrored for team B — done
 4. Batched `MatchEnv` (auto-reset, events, episode stats)
 5. Shared contract test
 6. Gravity and thrust randomization
@@ -155,6 +155,12 @@ Guide: [`docs/interface.md`](docs/interface.md).
 | I3 | Seeing an enemy | A line from the agent's hitbox centre reaches the living enemy's centre or one of its four hitbox corners (inset 0.05 tile) without touching rock, at any distance; dead agents see nothing | Centre-only checks reported 10.6% of shootable enemies as unseen (peeking heads), centre + head + feet 2.5%, centre + corners 0.1%. Any distance matches the respawn rule (P21) and lets agents plan approaches. The inset keeps a standing agent's feet off the floor tiles |
 | I4 | Team sight (2v2) | `team` = seen by the agent or a living teammate; `own` kept as a separate flag | Like players calling out positions; less hidden state for PPO, and the flag keeps both facts |
 | I5 | Batched ray caster | `env/raycast.py`: the `line_of_sight` grid walk run for all segments in lockstep in numpy, on grids padded with a rock frame; also returns where rock is entered (for the rays of step 3.3) | Identical to `line_of_sight` on 100,000 random segments. Visibility at 64 matches costs about 0.8 ms per step in 1v1 and 1.4 ms in 2v2, against 2.2 and 9.3 ms in pure Python; no new dependency (Numba would need a numpy 2.5.4 check). Cost is bound by the longest walk, not the number of segments |
+| I6 | Terrain in observations | A 21 × 13 tile window centred on the agent's tile: 1 rock, 0 air, −1 below the map (pits) | 24 rays cost 1.0–1.4 ms per step at 64 matches and are 2.6 tiles apart at 10 tiles; the window costs 0.1–0.2 ms and is exact. Pits are on 67% of maps and must not look like floor |
+| I7 | Side symmetry | Team B's observations are mirrored (x → width − x, x components negated, tile window mirrored) and its actions mirrored back in `decode` | One policy plays both sides identically; a mirror-image world test checks it exactly, including whole-number spawn positions |
+| I8 | One layout | Always 2 enemy slots and 1 ally slot with "present" flags; enemy slots in agent order | The same network plays 1v1 and 2v2 (keeps G3 open); fixed order keeps each enemy's memory in its slot |
+| I9 | Unseen enemies | Live details only while the team sees the enemy; otherwise the last-known position and time since seen, forgotten after 10 s; hits give the direction the shot came from | No wallhack, but the memory a player has |
+| I10 | Memory | No frame stacking in the environment | Velocity and the memory features cover it; stacking 4 frames would make 1,300 numbers. The trainer may stack or use an LSTM |
+| I11 | Scaling | Fixed physical scales (30 tiles, run and fall speed, 100 health, 10 kills, full durations); values stay within about ±3.5 | Sensible inputs from the first update; running normalization optional on top |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

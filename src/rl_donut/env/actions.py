@@ -9,6 +9,9 @@
 
 A policy samples the discrete parts from categorical heads and the aim from a Gaussian head.
 The aim needs no clipping or wrapping: the engine only uses its cosine and sine.
+
+Actions are in the agent's own frame. Team B observes a mirror image of the map, so its
+actions are mirrored back (move -> -move, aim a -> pi - a) by passing `mirror`.
 """
 
 from dataclasses import dataclass
@@ -28,8 +31,9 @@ class Controls:
     trigger: np.ndarray     # bool
 
 
-def decode(discrete: np.ndarray, continuous: np.ndarray) -> Controls:
-    """Policy actions -> engine controls. `discrete` is (M, A, 3) int, `continuous` (M, A, 1) float."""
+def decode(discrete: np.ndarray, continuous: np.ndarray, mirror: np.ndarray | None = None) -> Controls:
+    """Policy actions -> engine controls. `discrete` is (M, A, 3) int, `continuous` (M, A, 1) float;
+    `mirror` (broadcastable to (M, A), e.g. `world.team == TEAM_B`) marks agents acting in a mirrored frame."""
     discrete, continuous = np.asarray(discrete), np.asarray(continuous, dtype=np.float64)
     if discrete.shape[-1] != len(DISCRETE_NVEC) or continuous.shape[-1] != CONTINUOUS_DIM:
         raise ValueError(f"actions must end in {len(DISCRETE_NVEC)} discrete and {CONTINUOUS_DIM} continuous parts")
@@ -39,12 +43,17 @@ def decode(discrete: np.ndarray, continuous: np.ndarray) -> Controls:
         raise ValueError(f"discrete actions must be below {DISCRETE_NVEC}")
     if not np.isfinite(continuous).all():
         raise ValueError("aim angles must be finite")
-    return Controls(move=discrete[..., 0].astype(np.int64) - 1, jet=discrete[..., 1] == 1,
-                    aim=continuous[..., 0], trigger=discrete[..., 2] == 1)
+    move, aim = discrete[..., 0].astype(np.int64) - 1, continuous[..., 0]
+    if mirror is not None:
+        move, aim = np.where(mirror, -move, move), np.where(mirror, np.pi - aim, aim)
+    return Controls(move=move, jet=discrete[..., 1] == 1, aim=aim, trigger=discrete[..., 2] == 1)
 
 
-def encode(controls: Controls) -> tuple[np.ndarray, np.ndarray]:
+def encode(controls: Controls, mirror: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
     """Engine controls -> policy actions (for scripted bots that think in controls)."""
-    discrete = np.stack([np.asarray(controls.move) + 1, np.asarray(controls.jet, dtype=np.int64),
+    move, aim = np.asarray(controls.move), np.asarray(controls.aim, dtype=np.float64)
+    if mirror is not None:
+        move, aim = np.where(mirror, -move, move), np.where(mirror, np.pi - aim, aim)
+    discrete = np.stack([move + 1, np.asarray(controls.jet, dtype=np.int64),
                          np.asarray(controls.trigger, dtype=np.int64)], axis=-1).astype(np.int64)
-    return discrete, np.asarray(controls.aim, dtype=np.float64)[..., None]
+    return discrete, aim[..., None]

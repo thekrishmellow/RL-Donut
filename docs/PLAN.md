@@ -196,15 +196,16 @@ Still open:
 - **Visibility (approved, I3–I5):** an enemy is seen when its centre or any hitbox corner is
   in line of sight, at any distance; in 2v2 teammates share sightings, with a separate "seen by
   me" flag. Computed for the whole batch by an exact numpy ray caster.
-- **Observations (~150 numbers, egocentric, normalized):**
-  - self: health, ammo, fuel, velocity, on-ground, reloading, cooldown, aim sin/cos, direction last hit from;
-  - 24 rays: distance and hit type (wall / enemy / ally / nothing);
-  - 2 enemy slots: visible flag, relative position and velocity, health, time since seen;
-    zeroed or frozen when out of sight (no wallhack);
-  - ally: relative position, health, alive;
-  - match: time left, score difference.
-- **Memory:** stack 4 frames first; an LSTM only if partial observability hurts.
-- **Optional:** a 15 × 15 local tile crop with a small CNN, only if navigation is weak.
+- **Observations (approved, I6–I11): 330 numbers per agent, in the agent's own frame**
+  (team B mirrored):
+  - self (20): position, velocity, on-ground, fuel, health, ammo, reload, cooldown, aim,
+    alive, respawn, protection, direction and age of the last hit;
+  - 2 enemy slots (13 each): present, alive, seen by me / by team, remembered, relative
+    position (last known when out of sight, forgotten after 10 s), live velocity, health and
+    aim only while seen, time since seen;
+  - ally slot (9); match (2): time left, score difference;
+  - a 21 × 13 tile window around the agent (rock 1, air 0, below the map −1) instead of rays.
+- **Memory:** no frame stacking in the environment; the trainer may stack or add an LSTM.
 - **Speed benchmark:** environment steps per second, measured before any training. The
   target depends on the compute decision below.
 

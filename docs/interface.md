@@ -10,7 +10,7 @@ in [`DESIGN.md`](../DESIGN.md) with `I` IDs.
 |---|---|---|
 | 1 | Action space | done |
 | 2 | Visibility | done |
-| 3 | Observations | — |
+| 3 | Observations | done |
 | 4 | Batched `MatchEnv` | — |
 | 5 | Shared contract test | — |
 | 6 | Gravity and thrust randomization | — |
@@ -149,3 +149,78 @@ The batched cost is set by the **longest** walk, because the loop runs until the
 finishes, and the fixed cost of each numpy call dominates. It therefore grows slowly with
 batch size: at 256 matches in 1v1, engine plus visibility runs 110,000 match steps per second.
 If this becomes the bottleneck, step 3.7 will look at it again.
+
+## Step 3 — Observations
+
+An observation is everything the network knows: one float32 vector of `OBS_DIM` = 330
+numbers per agent per decision step. `Observer(world)` in `rl_donut.env.observe` builds
+them and keeps the memory they need:
+
+```python
+observer = Observer(world)
+obs = observer.observe(visibility(world))           # after reset: (M, A, 330)
+ev = match_step(world, ...)
+observer.record(ev)                                 # age memory, note this step's hits
+obs = observer.observe(visibility(world))
+observer.reset(matches)                             # after World.reset / load_maps of those matches
+```
+
+### Layout
+
+The first 57 numbers have names in `FEATURE_NAMES`; then come the 273 tiles.
+
+| Part | Count | Contents |
+|---|---|---|
+| Self | 20 | position on the map (x / width, y / height) and inside its tile; velocity; on-ground; fuel, health, ammo; reload and cooldown left; aim (cos, sin); alive; respawn and protection time left; direction the last hit came from (cos, sin) and time since |
+| Enemy slot × 2 | 13 each | present, alive, seen by me, seen by my team, remembered; relative position; while seen: relative velocity, health, aim (cos, sin); time since seen |
+| Ally slot | 9 | present, alive, relative position, velocity, health, aim (cos, sin) |
+| Match | 2 | time left, score difference |
+| Tile grid | 21 × 13 = 273 | tiles centred on the agent's tile, row by row: 1 rock, 0 air, −1 below the map |
+
+`scripts/preview_observation.py` draws one observation: both agents' tile windows on the map,
+the windows as each agent receives them, and the main numbers side by side.
+
+### The choices behind it (I6–I11)
+
+- **Terrain as a tile grid, not rays (I6).** For 64 matches, 24 distance rays cost
+  1.0–1.4 ms per step. They are also coarse: at 10 tiles, neighbouring rays are 2.6 tiles
+  apart, enough to miss a gap an agent fits through. A 21 × 13 window of tiles is a plain array
+  lookup (0.1–0.2 ms) and exact. It can't see beyond ±10 × ±6 tiles, but enemies come
+  through the enemy slots at any distance anyway. Because it is image-shaped, a small CNN
+  can replace the first layer later.
+- **Pits are marked (I6).** 67% of maps have pits. Below the map is a deadly drop, not
+  rock, so those tiles are −1; the sides and top beyond the map are rock, as in the engine.
+- **Team B sees a mirror image (I7).** The maps are mirror images, so team B's observation
+  flips x: positions become width − x, velocities and aim cosines change sign, and the tile
+  window is mirrored. Its actions are flipped back by `actions.decode(..., mirror=team ==
+  TEAM_B)`. One policy then plays both sides identically, and "map x" always means distance
+  from its own side. A test builds a mirror-image world with the teams swapped and checks
+  every agent's observation equals its twin's. Building the windows needed care. Spawn
+  positions are whole numbers of tiles, and simply flipping a window centred on the agent's
+  tile is one column off exactly then, so the columns are chosen in the agent's own frame.
+- **One layout for 1v1 and 2v2 (I8).** There are always 2 enemy slots and 1 ally slot, with
+  "present" = 0 for slots that don't exist in 1v1. The same network can play both formats,
+  which keeps the format decision (G3) open. Slots stay in agent order, so "enemy 0" is
+  always the same player and its memory stays attached.
+- **Memory instead of wallhacks (I9).** While an enemy is seen by the agent or a teammate,
+  its slot holds live position, velocity, health and aim. When it is out of sight, only its
+  last-known position and the time since are kept. After 10 s it is forgotten (position 0,
+  "remembered" 0). Hits work the same way: the agent learns the direction the shot came from,
+  not where the shooter is now.
+- **No frame stacking (I10).** Velocity is in the observation, and memory covers what an
+  old frame would say. Stacking 4 frames would make it about 1,300 numbers. If the trainer
+  wants stacking or an LSTM, it adds them on its side.
+- **Fixed scales (I11).** Positions are divided by 30 tiles (rifle range), velocities by
+  run speed (6) and maximum fall speed (20), health by 100, the score difference by 10, and
+  times by their full length. Everything stays within about ±3.5 (the largest is the
+  distance across the map), and a test checks this on real matches. PPO's running
+  normalization can still sit on top.
+
+### Cost
+
+Per decision step for 64 matches:
+
+| Format | Engine | Visibility | Observations | Match steps per second, all three |
+|---|---|---|---|---|
+| 1v1 | 0.44 ms | 0.71 ms | 0.39 ms | 41,500 |
+| 2v2 | 0.59 ms | 1.07 ms | 0.56 ms | 28,800 |

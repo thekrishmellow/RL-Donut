@@ -81,6 +81,7 @@ an array of shape (matches, agents), agents ordered team A first (`[A, B]` in 1v
 | Match | `env/match.py` | `match_step(world, move, jet, aim, trigger) -> MatchEvents`: one decision step (2 ticks) for every match; 60 s deathmatch, `World.score`, `done`, `outcome`; `MatchEvents` has exactly the event fields of section 4.2; `World.load_maps` restarts chosen matches on new maps |
 | Actions (Phase 3) | `env/actions.py` | `decode(discrete, continuous) -> Controls` for `match_step`; layout in section 4.1 |
 | Visibility (Phase 3) | `env/visibility.py`, `env/raycast.py` | `visibility(world)`: `own` and `team` (M, A, A) bool, [m, i, j] = i sees enemy j (centre or any hitbox corner in line of sight, any distance; `team` adds living teammates' sightings). `raycast.segments` checks thousands of lines of sight at once, identical to `line_of_sight` |
+| Observations (Phase 3) | `env/observe.py` | `Observer(world)`: `observe(vis) -> (M, A, 330)` float32, `record(events)` after each step, `reset(matches)`; layout in section 4.1 |
 
 The engine is complete. Next, Team A's Phase 3 wraps `match_step` with observations into
 the real `MatchEnv`. To watch a match, run `scripts/view_match.py`; engine speed is about
@@ -182,10 +183,10 @@ class MatchEnv:                      # rl_donut.env.MatchEnv (Team A) / rl_donut
     n_matches: int                   # matches run side by side
     n_agents: int                    # 2 (1v1) or 4 (2v2), team A first
     team: np.ndarray                 # (n_agents,) 0 = team A, 1 = team B
-    obs_dim: int                     # length of one agent's observation vector
+    obs_dim: int                     # length of one agent's observation vector: 330
     action_nvec: tuple[int, ...]     # sizes of the discrete action parts: (3, 2, 2) = move, jetpack, shoot
     action_cont_dim: int             # number of continuous action parts: 1 = aim angle in radians
-    spec_version: str                # "0.1"; bumped whenever observations, actions or events change
+    spec_version: str                # "0.2"; bumped whenever observations, actions or events change
 
     def __init__(self, n_matches: int, team_size: int = 1, split: str = "train",
                  seed: int = 0, map_filter=None, cfg=None): ...
@@ -210,6 +211,22 @@ only 46% of shots at real engagement distances; continuous aim allows 98%
 (`scripts/aim_ceiling.py`, table in `docs/interface.md`). For PPO this means one Gaussian head
 (a mean from the network and a learned log standard deviation) next to the categorical heads;
 the log-probability of an action is the sum over the four parts.
+
+**Observations (decided in Phase 3, I6–I11).** 330 float32 numbers per agent, already scaled
+to roughly ±3.5 by fixed physical scales:
+- 57 named numbers (`rl_donut.env.FEATURE_NAMES`): self (20), 2 enemy slots (13 each),
+  1 ally slot (9), match (2);
+- then a 21 × 13 tile window around the agent (1 rock, 0 air, −1 below the map), row by row.
+  It can be reshaped to an image for a CNN.
+
+One layout serves 1v1 and 2v2: slots that don't exist have "present" = 0. Enemies out of
+sight show only a last-known position and the time since seen (no wallhack). There is no
+frame stacking; the trainer may stack or use an LSTM. Full details: `docs/interface.md`, step 3.
+
+**Each agent's own frame.** Team B's observations are a mirror image (x flipped), and its
+actions are mirrored back by the env (move → −move, aim a → π − a), so one policy plays
+either side without knowing which. Scripted bots that compute engine controls from the true
+state must convert them with `actions.encode(controls, mirror=team == TEAM_B)`.
 
 ```python
 @dataclass
@@ -333,9 +350,9 @@ Build: `rl_donut.rl.stand_in.StandInEnv` following section 4, plus
 - Reuse the real engine: `World` and `match_step` already play full matches with real
   physics, rifle, health, respawn and scoring. Add observations and auto-reset
   (`World.load_maps`).
-- Observations: a simple version of the Phase 3 draft (self state, relative enemy position
-  when `visibility(world).team` says it is seen, a few rays). Keep it behind one function so
-  it's easy to delete.
+- Observations: use the real `Observer` (`env/observe.py`) with `visibility`, so the
+  stand-in already has the final 330-number layout; only auto-reset and episode stats are
+  left to add.
 - Actions: the real mixed layout of section 4.1. Use `rl_donut.env.actions.decode` to turn
   them into `match_step` inputs, so the stand-in and the real env read actions identically.
 
