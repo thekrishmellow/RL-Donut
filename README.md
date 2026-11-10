@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): steps 1–4 of 8 done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): steps 1–5 of 8 done.
 
 ## Documentation
 
@@ -39,6 +39,7 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/preview_physics.py                    # one tank's flight paths vs the generator's needs -> outputs/physics_preview.png
 .venv/bin/python scripts/route_check.py                        # route bot flies 2,000 generator routes; failures -> outputs/route_failures.png
 ```
+.venv/bin/python scripts/preview_rifle.py --count 3            # fans of rifle shots on real maps -> outputs/rifle_preview.png
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
 `rl_donut.mapgen.load_split("train")`. Rebuild only after changing the generator (see the
@@ -62,6 +63,7 @@ RL-Donut/
 │   │   ├── physics.py         One tick: controls, gravity, jetpack, speed limits, fuel
 │   │   └── navigation.py      Route planner on the generator's flight model, and a bot that flies it
 │   └── mapgen/                Phase 1: procedural maps
+│   │   ├── rifle.py           Aiming, hitscan shots, cooldown, magazine and reload
 │       ├── seeding.py         Master seed -> independent named random streams
 │       ├── generator.py       Pipeline entry point: generate_map(seed) -> GeneratedMap
 │       ├── config.py          All generator settings (MapConfig and one config per step)
@@ -85,6 +87,7 @@ RL-Donut/
 │   ├── route_check.py
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
+│   ├── preview_rifle.py
 ├── map_cache/                 Resumable build chunks (git-ignored)
 └── outputs/                   Generated images and logs (git-ignored)
 ```

@@ -6,10 +6,11 @@ quantity has shape (matches,). Agents are ordered team A first, then team B, so 
 
 Coordinates are continuous, in tiles: x grows to the right, y grows downward (like grid
 rows), and an agent's position is the centre of its hitbox. Mirroring a position is
-therefore `x -> width - x`.
+therefore `x -> width - x`. Aim angles are radians with direction (cos, sin) in these
+coordinates, so 0 points right and pi/2 points down; mirroring an angle is `a -> pi - a`.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -37,6 +38,10 @@ class AgentView:
     vy: float
     fuel: float
     alive: bool
+    aim: float
+    ammo: int
+    cooldown: int
+    reload: int
 
 
 @dataclass
@@ -54,9 +59,18 @@ class World:
     vy: np.ndarray
     fuel: np.ndarray        # (M, A) jetpack fuel units
     alive: np.ndarray       # (M, A) bool
+    aim: np.ndarray         # (M, A) radians
+    ammo: np.ndarray        # (M, A) rounds in the magazine
+    cooldown: np.ndarray    # (M, A) ticks until the rifle can fire again
+    reload: np.ndarray      # (M, A) ticks of reloading left; 0 = not reloading
+    # Random numbers (rifle spread) come from one stream per match, seeded from
+    # (rng_seed, map seed, episode), so a match never depends on the rest of its batch.
+    rng_seed: int = 0
+    episode: np.ndarray = field(default=None)   # (M,) episode number of each match, from 0
+    rngs: list = field(default_factory=list)    # (M,) numpy Generators
 
     @classmethod
-    def from_maps(cls, maps: list[GeneratedMap], cfg: EngineConfig | None = None) -> "World":
+    def from_maps(cls, maps: list[GeneratedMap], cfg: EngineConfig | None = None, rng_seed: int = 0) -> "World":
         cfg = cfg or EngineConfig()
         if not maps:
             raise ValueError("need at least one map")
@@ -76,13 +90,16 @@ class World:
             team=np.repeat([TEAM_A, TEAM_B], cfg.team_size),
             x=np.zeros((n, k)), y=np.zeros((n, k)), vx=np.zeros((n, k)), vy=np.zeros((n, k)),
             fuel=np.zeros((n, k)), alive=np.ones((n, k), dtype=bool),
+            aim=np.zeros((n, k)), ammo=np.zeros((n, k), dtype=np.int64),
+            cooldown=np.zeros((n, k), dtype=np.int64), reload=np.zeros((n, k), dtype=np.int64),
+            rng_seed=rng_seed, episode=np.full(n, -1, dtype=np.int64), rngs=[None] * n,
         )
         world.reset()
         return world
 
     @classmethod
-    def single(cls, m: GeneratedMap, cfg: EngineConfig | None = None) -> "World":
-        return cls.from_maps([m], cfg)
+    def single(cls, m: GeneratedMap, cfg: EngineConfig | None = None, rng_seed: int = 0) -> "World":
+        return cls.from_maps([m], cfg, rng_seed)
 
     @property
     def n_matches(self) -> int:
@@ -91,7 +108,8 @@ class World:
     def reset(self, matches: np.ndarray | None = None) -> None:
         """Start the given matches (default: all) from tick 0, agent `i` of each team on spawn `i`.
 
-        Team B's spawns mirror team A's, so starting positions are mirror images.
+        Team B's spawns mirror team A's, so starting positions are mirror images. Team A aims
+        right and team B left; every rifle starts loaded and ready.
         """
         matches = np.arange(self.n_matches) if matches is None else np.asarray(matches)
         slot = np.arange(self.cfg.n_agents) % self.cfg.team_size
@@ -100,10 +118,18 @@ class World:
         self.vx[matches] = self.vy[matches] = 0.0
         self.fuel[matches] = self.cfg.physics.fuel_capacity
         self.alive[matches] = True
+        self.aim[matches] = np.where(self.team == TEAM_A, 0.0, np.pi)
+        self.ammo[matches] = self.cfg.rifle.magazine
+        self.cooldown[matches] = self.reload[matches] = 0
         self.tick[matches] = 0
+        for m in matches:
+            self.episode[m] += 1
+            self.rngs[m] = np.random.default_rng([self.rng_seed, int(self.seeds[m]), int(self.episode[m])])
 
     def agent(self, match: int, agent: int) -> AgentView:
         return AgentView(match, agent, int(self.team[agent]), float(self.x[match, agent]),
                          float(self.y[match, agent]), float(self.vx[match, agent]),
                          float(self.vy[match, agent]), float(self.fuel[match, agent]),
-                         bool(self.alive[match, agent]))
+                         bool(self.alive[match, agent]), float(self.aim[match, agent]),
+                         int(self.ammo[match, agent]), int(self.cooldown[match, agent]),
+                         int(self.reload[match, agent]))

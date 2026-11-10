@@ -8,7 +8,7 @@ This guide explains each step: what it does, why, and the alternatives considere
 Decisions are logged in [`DESIGN.md`](../DESIGN.md) (IDs starting with `P`); the
 whole-project plan is in [`PLAN.md`](PLAN.md).
 
-## Promises the engine must keep
+## Promises the engine must keep (all four pass)
 
 The map generator assumed these when it decided which maps are valid. Each one becomes a test.
 
@@ -27,8 +27,8 @@ The map generator assumed these when it decided which maps are valid. Each one b
 | 2. Tile collision | done | `src/rl_donut/env/collision.py` |
 | 3. Movement, jetpack and fuel | done | `src/rl_donut/env/physics.py`, `src/rl_donut/env/config.py` |
 | 4. Route check | done | `src/rl_donut/env/navigation.py`, `scripts/route_check.py` |
-| 5. Aiming and hitscan rifle | next | — |
-| 6. Health, death and respawn | planned | — |
+| 5. Aiming and hitscan rifle | done | `src/rl_donut/env/rifle.py`, `src/rl_donut/env/config.py` |
+| 6. Health, death and respawn | next | — |
 | 7. Match loop | planned | — |
 | 8. Debug viewer and speed check | planned | — |
 
@@ -373,3 +373,92 @@ planned, blue = flown, green = goal floor) to `outputs/route_failures.png`.
 - `standing_box` finds the spot under an agent standing on it;
 - ≥ 99% of routes arrive, with a full tank before each hop;
 - the same routes give the same results, bit for bit.
+
+---
+
+## Step 5: Aiming and hitscan rifle (`rifle.py`)
+
+`fire(world, aim, trigger)` advances every rifle by one tick and returns the shots fired on
+it. `aim` is an angle in radians per agent (0 points right, π/2 down, since y grows
+downward); `trigger` is True to shoot.
+
+### Hitscan
+
+A shot has no travelling bullet. On the tick it's fired, a straight ray from the shooter's
+hitbox centre hits the first thing it meets:
+
+1. The direction is the aim plus a random spread.
+2. The ray is intersected with every living enemy's hitbox; the nearest one it enters
+   within 30 tiles is the candidate. An enemy overlapping the shooter is hit at the muzzle.
+3. The generator's own `line_of_sight` decides whether rock is in the way, from the
+   shooter's centre to the point where the ray enters the candidate's hitbox. Rock that
+   hides the nearest enemy also hides everyone behind it, so one check is enough.
+
+**Why hitscan.** Mini Militia's rifles behave close to it, and it keeps credit simple for
+RL: a shot's result is known on the tick it's fired. Projectiles (bullets with speed) add
+dodging but need bullet state and collision every tick.
+
+**Why the generator's function, one shot at a time.** "Can't see" and "can't be shot" then
+use exactly the same rule (M40). Measured on a loaded laptop, one call costs 4–19 µs; with
+every agent firing as fast as the rifle allows, that adds 95 µs (1v1) to 190 µs (2v2) to a
+380 µs physics tick of 64 matches. A batched numpy ray walk would take about 600 µs however
+few shots there are, and sampling points along the ray is inexact (M40). numba stays the
+fallback if the speed check (step 8) needs it.
+
+**Spawns stay safe.** The generator hid spawns from each other centre to centre. Agents
+stand lower in the box than its centre, so we checked real shots: from every team A spawn
+to every team B spawn on 1,000 val maps, 0 of 36,000 hit within range (0.9% would at
+unlimited range). Spawn protection (step 6) covers anything else.
+
+### Timing and ammo
+
+| Setting (`RifleConfig`) | Value |
+|---|---|
+| `damage` | 15 (applied in step 6): 7 hits, about 1.2 s, to kill |
+| `shot_interval` | 0.2 s (6 ticks) |
+| `magazine` | 30 rounds; firing the last one starts the reload |
+| `reload_time` | 1.5 s (45 ticks); spare rounds are unlimited |
+| `range` | 30 tiles |
+| `spread_deg` | ±2°, uniform |
+
+Rifle times must be whole numbers of ticks. Each tick the cooldown and reload count down
+first, then rifles with the trigger held, no cooldown, no reload and rounds left fire.
+Holding the trigger therefore fires on ticks 0, 6, 12 … 174, then again on tick 219.
+Releasing the trigger doesn't reset the cooldown.
+
+**What spread means.** Aimed at the centre, every shot hits at 10 tiles. At 30 tiles about
+76% hit a target to the side, since spread moves the shot up and down across the hitbox's
+1.6-tile height, and 38% hit one straight above or below (0.8-tile width).
+
+### Aim, teams and randomness
+
+- Living agents turn to their aim instantly; the engine accepts any angle. How an agent
+  chooses an angle is Phase 3's decision. The draft's 16 fixed directions are 22.5° apart,
+  while a hitbox 10 tiles away spans about 4.6°, so that design must change.
+- After a reset, team A aims right and team B left (mirror images).
+- No friendly fire: teammates are neither hit nor in the way.
+- Spread comes from one random stream per match, seeded from (world seed, map seed,
+  episode), so a match plays out the same whatever else is in its batch, and each reset
+  starts a new episode with new random numbers.
+
+**Picture:** `scripts/preview_rifle.py` fires a fan of 180 shots from one agent on real
+maps: blue lines stop at rock or the 30-tile range, red ones hit an enemy.
+
+**Tests** (`tests/test_rifle.py`):
+
+- invalid rifle settings and times that aren't whole ticks are rejected;
+- reset loads rifles and aims the teams at each other;
+- ray-box intersection, including a ray starting inside the box;
+- hits in open air at the exact entry point; misses when aiming away or just past the
+  hitbox; the range limit; rock in the way; a shot through the corner of two diagonal rocks
+  is blocked;
+- the nearest enemy is hit, teammates are ignored, an overlapping enemy is hit at the muzzle;
+- fire rate, magazine and reload timing; releasing the trigger keeps the cooldown;
+- dead agents neither fire, turn nor get hit;
+- spread stays within ±2° and is uniform; it is seeded per match, independent of the batch,
+  and new after a reset;
+- **contracts:** on 40 val maps, 1,500+ random shots agree with an independent check that
+  samples the ray every 0.002 tiles; on 100 val maps, no agent on a spawn can hit an agent
+  on an enemy spawn, aiming at its centre or near any corner;
+- random play with physics on 20 maps: only enemies are hit, every hit point is on the
+  target's hitbox, within range and in sight.

@@ -90,10 +90,14 @@ def test_batch_equals_single_matches(maps):
 
 def test_state_arrays_have_documented_shapes_and_types(maps):
     world = World.from_maps(maps[:3], EngineConfig(team_size=2))
-    for name in ("x", "y", "vx", "vy"):
+    for name in ("x", "y", "vx", "vy", "fuel", "aim"):
         arr = getattr(world, name)
         assert arr.shape == (3, 4) and arr.dtype == np.float64
+    for name in ("ammo", "cooldown", "reload"):
+        arr = getattr(world, name)
+        assert arr.shape == (3, 4) and arr.dtype == np.int64
     assert world.alive.shape == (3, 4) and world.alive.dtype == bool
+    assert world.episode.tolist() == [0, 0, 0] and len(world.rngs) == 3
     assert world.grids.shape == (3, 48, 96) and world.grids.dtype == bool
     assert world.spawns.shape == (3, 2, 6, 2)
 

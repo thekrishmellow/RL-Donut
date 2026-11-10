@@ -62,7 +62,7 @@ tooling, `M` map generator; later phases add their own letters).
 |---|---|---|---|
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
-| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–4 done, step 5 next) |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–5 done, step 6 next) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
@@ -164,7 +164,7 @@ shooting because a failure there would change the generator and force a rebuild 
 | Body and collision | approved (P4, P5, P7) | Hitbox 0.8 × 1.6 tiles; one axis at a time against tiles; agents pass through each other |
 | Movement | approved (P8–P10) | Run 6 tiles/s (set directly); gravity 25 tiles/s²; thrust 40 tiles/s²; rising limit 12, falling limit 20 tiles/s |
 | Fuel | approved (P8) | 100; drains 32/s while thrusting, refills 25/s while standing |
-| Rifle | draft | Hitscan; 15 damage; 0.2 s between shots; ±2° spread; 30-round magazine, 1.5 s auto-reload, unlimited reserve; 30-tile range |
+| Rifle | approved (P15–P18) | Hitscan from the hitbox centre, checked with the generator's `line_of_sight`; 15 damage; 0.2 s between shots; uniform ±2° spread; 30-round magazine, 1.5 s auto-reload, unlimited reserve; 30-tile range; no friendly fire; aim at any angle, instantly |
 | Health | draft | 100; regenerates 10/s after 3 s without damage (on, per G2) |
 | Match | draft | Timed deathmatch with respawns: 2 s respawn at a spawn out of enemy sight, 1 s protection; most kills wins, equal is a draw |
 | Out of scope for v1 | draft | Grenades (first v2 addition), pickups, weapon switching, melee, zoom, dual wield |
@@ -175,7 +175,8 @@ Required tests, from Phase 1 contracts: climb at least `climb_budget` on one tan
 Resolved so far: the draft had no rising-speed limit (1.27 tiles per tick, breaking M16)
 and left level flight only 2% above the generator's assumption; fixed by P8. Climb and
 level-flight contracts pass with 35.7 and 30.0 tiles. The route check passes: 99.80% of
-2,000 routes arrive with a full tank before each hop (P12–P14).
+2,000 routes arrive with a full tank before each hop (P12–P14). Hitscan agrees with an
+independent check, and no agent on a spawn can hit an agent on an enemy spawn (P15).
 
 Still open:
 
@@ -186,7 +187,8 @@ Still open:
 ### Phase 3 — RL interface (draft)
 
 - **Actions:** `MultiDiscrete([3, 2, 16, 2])`: move (left / none / right), jetpack
-  (off / on), aim (16 directions), shoot (no / yes).
+  (off / on), aim (16 directions), shoot (no / yes). The 16 aim directions are too coarse
+  to hit at range and must be revisited (open decisions).
 - **Observations (~150 numbers, egocentric, normalized):**
   - self: health, ammo, fuel, velocity, on-ground, reloading, cooldown, aim sin/cos, direction last hit from;
   - 24 rays: distance and hit type (wall / enemy / ally / nothing);
@@ -350,4 +352,5 @@ contracts in section 4 exist so each area can be built against them independentl
 | PyTorch, PettingZoo, renderer, tracker, dashboard tool | Their phases | Section 6 |
 | Compute targets (environments, steps/s) | Phase 3 | Section 7 |
 | OOD split definitions | Phase 8 | M49 |
+| Aim action | Phase 3 | 16 fixed directions are 22.5° apart, but a hitbox 10 tiles away spans about 4.6°, so most targets can't be hit. Options: finer directions, aim relative to the nearest seen enemy, or continuous aim. The engine takes any angle (P17) |
 | CI (tests on every push) | Any time; before friends join | Section 7 |

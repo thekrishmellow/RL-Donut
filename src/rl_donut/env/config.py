@@ -30,6 +30,25 @@ class PhysicsConfig:
 
 
 @dataclass(frozen=True)
+class RifleConfig:
+    damage: float = 15.0
+    # Times in seconds; each must be a whole number of ticks.
+    shot_interval: float = 0.2
+    reload_time: float = 1.5
+    # Reloading starts automatically when the magazine is empty; spare rounds are unlimited.
+    magazine: int = 30
+    range: float = 30.0
+    # Each shot leaves at the aim angle plus a uniform random offset within ± this many degrees.
+    spread_deg: float = 2.0
+
+    def __post_init__(self):
+        if min(self.damage, self.shot_interval, self.reload_time, self.range) <= 0 or self.magazine < 1:
+            raise ValueError("rifle settings must be positive")
+        if not 0 <= self.spread_deg < 90:
+            raise ValueError("spread_deg must be in [0, 90)")
+
+
+@dataclass(frozen=True)
 class EngineConfig:
     # Agents per team: 1 for 1v1, 2 for 2v2.
     team_size: int = 1
@@ -40,6 +59,7 @@ class EngineConfig:
     hitbox_w: float = 0.8
     hitbox_h: float = 1.6
     physics: PhysicsConfig = field(default_factory=PhysicsConfig)
+    rifle: RifleConfig = field(default_factory=RifleConfig)
     map: MapConfig = field(default_factory=MapConfig)
 
     def __post_init__(self):
@@ -55,6 +75,17 @@ class EngineConfig:
         p = self.physics
         if max(p.max_rise_speed, p.max_fall_speed, p.run_speed) * self.dt >= 1:
             raise ValueError("every speed limit must stay under one tile per tick")
+        for seconds in (self.rifle.shot_interval, self.rifle.reload_time):
+            if abs(seconds * self.tick_rate - round(seconds * self.tick_rate)) > 1e-9:
+                raise ValueError("rifle times must be whole numbers of ticks")
+
+    @property
+    def shot_interval_ticks(self) -> int:
+        return round(self.rifle.shot_interval * self.tick_rate)
+
+    @property
+    def reload_ticks(self) -> int:
+        return round(self.rifle.reload_time * self.tick_rate)
 
     @property
     def n_agents(self) -> int:
