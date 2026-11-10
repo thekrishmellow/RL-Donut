@@ -23,9 +23,8 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | **5.3** | **done** | Reward function and shaping (`rl_donut.rl.rewards`) |
 | **5.4** | **done** | PPO implementation (`rl_donut.rl.ppo`) |
 | **5.5** | **done** | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
-| **5.6** | next | Logging, exploit watchlist, checkpoint manager |
-| **5.6** | planned | Logging, exploit watchlist, checkpoint manager |
-| **5.7** | planned | Curriculum (static target → turret → rusher → pits) |
+| **5.6** | **done** | Logging, exploit watchlist, checkpoint manager |
+| **5.7** | next | Curriculum (static target → turret → rusher → pits) |
 | **5.8** | planned | Evaluation against fixed bots (`scripts/eval_bots.py`) |
 | **6.1** | planned | Checkpoint snapshot pool (`rl_donut.rl.pool`) |
 | **6.2** | planned | Opponent sampling (PFSP + latest self + bots) |
@@ -52,6 +51,8 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 | R10 | Value bootstrapping | Use `final_obs` on time-limit truncation | Match time limits are environment truncations, not agent terminations; bootstrapping from $V(\text{final\_obs})$ removes truncation bias. |
 | R11 | Opponent batching | Call `Policy.act()` once for all opponent slots in the batch | Minimizes Python function call overhead and leverages batched array operations for bots. |
 | R12 | Single-process rollout | Batched numpy rollouts in the main training process | Eliminates IPC serialization overhead and worker synchronization bottlenecks on loaded multi-core machines. |
+| R13 | Exploit alarm thresholds | Draw > 35%, hover > 50%, engagement dist < 3.0 tiles, shots/hit > 8, spawn kills > 40% | Detects passive camping, ceiling stalling, spawn entrapment, and blind shooting early before degenerate policies consolidate. |
+| R14 | Checkpoint retention | Keep latest 5 checkpoints plus milestone snapshots every 100 updates | Strict automatic pruning avoids filling the host machine's remaining disk space while preserving milestones for the opponent pool. |
 
 ---
 
@@ -186,3 +187,21 @@ $$r_t = r_{\text{sparse}} + \alpha \cdot r_{\text{shaping}}$$
 - Emits structured append-only logs in `runs/<id>/metrics.jsonl`.
 - Saves run metadata in `runs/<id>/config.json`.
 - Periodically saves model checkpoints in `runs/<id>/ckpt_<update>.pt`.
+
+
+---
+
+## Step 5.6: Logging, Exploit Watchlist & Checkpoint Management
+
+### Exploit Watchlist (`watchlist.py`)
+Automatically monitors training episodes for degenerate RL strategies:
+- **`draw_rate`**: Alarms if $> 35\%$ of completed matches end in a tie (indicating passive mutual evasion).
+- **`hover_fraction`**: Alarms if agents spend $> 50\%$ of time in air with $|v_y| < 2.0\,\text{tiles/s}$ (ceiling camping).
+- **`mean_engagement_dist`**: Alarms if average hit distance drops below $3.0$ tiles (face-hugging / spawn pinning).
+- **`shots_per_hit`**: Alarms if $> 8.0$ (wasteful blind firing).
+- **`spawn_kill_fraction`**: Alarms if $> 40\%$ of kills occur within $8$ tiles of an enemy spawn point.
+
+### Checkpoint Manager (`checkpoints.py`)
+- Automatically saves PyTorch model and optimizer states.
+- Preserves all milestone checkpoints (`update % 100 == 0`).
+- Prunes intermediate checkpoints to keep at most the last 5 updates, protecting host storage space.
