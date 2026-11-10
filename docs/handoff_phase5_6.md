@@ -2,7 +2,7 @@
 
 This guide is for the teammate building **Phase 5 (rewards and PPO against bots)** and
 **Phase 6 (self-play, opponent pool, Elo, 1v1 then 2v2)** while the rest of the team
-finishes Phases 2–4 (engine, RL interface, bots, renderer, replays). The two halves are
+builds Phases 3–4 (RL interface, bots, renderer, replays) on top of the finished engine. The two halves are
 **merged at the end of Phase 4**.
 
 It covers what already exists, the working rules, the interface both sides build against,
@@ -26,8 +26,7 @@ numbers from the first design spec, re-examined in their step).
 ```mermaid
 flowchart LR
     subgraph A[Team A: engine and interface]
-        A2[Phase 2 step 8<br/>viewer, speed check] --> A3[Phase 3<br/>observations, actions, env API]
-        A3 --> A4[Phase 4<br/>bots, renderer, replays]
+        A3[Phase 3<br/>observations, actions, env API] --> A4[Phase 4<br/>bots, renderer, replays]
     end
     subgraph B[Team B: learning]
         B5[Phase 5<br/>rewards, PPO, curriculum] --> B6[Phase 6<br/>self-play, pool, Elo, 2v2]
@@ -39,8 +38,8 @@ flowchart LR
     M --> P7[Phase 7+<br/>together]
 ```
 
-- **Team A** finishes the engine (health, death, respawn, match loop, speed check), then
-  builds the RL interface (Phase 3) and the scripted bots, renderer and replays (Phase 4).
+- **Team A** has finished the engine (Phase 2) and builds the RL interface (Phase 3), then
+  the scripted bots, renderer and replays (Phase 4).
 - **Team B** builds Phases 5 and 6 against a **stand-in environment** that follows the
   contract in section 4. The stand-in reuses the real engine pieces that already exist
   (physics and rifle), so it behaves like the real game as far as possible.
@@ -82,8 +81,10 @@ an array of shape (matches, agents), agents ordered team A first (`[A, B]` in 1v
 
 | Match | `env/match.py` | `match_step(world, move, jet, aim, trigger) -> MatchEvents`: one decision step (2 ticks) for every match; 60 s deathmatch, `World.score`, `done`, `outcome`; `MatchEvents` has exactly the event fields of section 4.2; `World.load_maps` restarts chosen matches on new maps |
 
-Still to come from Team A (step 8): debug viewer and speed check; then Phase 3 wraps
-`match_step` with observations into the real `MatchEnv`.
+The engine is complete. Next, Team A's Phase 3 wraps `match_step` with observations into
+the real `MatchEnv`. To watch a match, run `scripts/view_match.py`; engine speed is about
+73,700 match decision steps/s in 1v1 and 55,200 in 2v2 at 64 matches
+(`scripts/bench_engine.py`, numbers in `docs/engine.md` step 8).
 
 A stand-in environment (step 5.2) only needs to add observations and auto-reset around
 `match_step`.
@@ -102,7 +103,7 @@ agent almost no signal; shaping and the curriculum must carry early learning.
 | Time to kill | 7 hits ≈ 1.2 s at full fire rate (approved) | Fights are short compared with episodes |
 | Health | 100, regenerates 10/s after 3 s without damage (approved, P20) | Retreating is a real tactic |
 | Respawn | 2 s, at a random own spawn no living enemy can see; 1 s protection, ended by firing (approved, P21–P22) | Spawn camping is hard |
-| Engine speed | ~380 µs per physics tick for 64 matches on a busy laptop | Physics alone allows about 1,300 batch steps/s, i.e. ~84,000 match decision steps/s, before shots, observations and the network; Phase 3 measures the real number |
+| Engine speed | ~73,700 match decision steps/s (1v1) and ~55,200 (2v2) at 64 matches, one process (P28) | Before observations and the network; Phase 3 measures the full environment |
 
 ### Tooling
 

@@ -63,7 +63,7 @@ tooling, `M` map generator; later phases add their own letters).
 |---|---|---|---|
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
-| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–7 done, step 8 next) |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | done (steps 1–8) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
@@ -326,7 +326,7 @@ lower step rate; Phase 3's speed benchmark decides.
 
 ### Team
 
-Two teams working in parallel. Team A finishes Phases 2–4 (engine, RL interface, bots,
+Two teams working in parallel. Team A builds Phases 3–4 (RL interface, bots,
 renderer, replays); Team B builds Phases 5–6 (rewards, PPO, self-play) on branch
 `phase5-6` against a stand-in environment. The two are merged at the end of Phase 4. The
 interface between them, the step list and the merge checklist are in

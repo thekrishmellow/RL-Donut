@@ -4,7 +4,8 @@ The engine plays matches on the maps from Phase 1: it moves agents, resolves col
 fires the rifle, applies damage and respawns, and keeps score. It has no rendering code
 and runs many matches at once, because training speed is the project's biggest risk.
 
-This guide explains each step: what it does, why, and the alternatives considered.
+All 8 steps are done. This guide explains each one: what it does, why, and the
+alternatives considered.
 Decisions are logged in [`DESIGN.md`](../DESIGN.md) (IDs starting with `P`); the
 whole-project plan is in [`PLAN.md`](PLAN.md).
 
@@ -30,7 +31,7 @@ The map generator assumed these when it decided which maps are valid. Each one b
 | 5. Aiming and hitscan rifle | done | `src/rl_donut/env/rifle.py`, `src/rl_donut/env/config.py` |
 | 6. Health, death and respawn | done | `src/rl_donut/env/life.py`, `src/rl_donut/env/config.py` |
 | 7. Match loop | done | `src/rl_donut/env/match.py`, `src/rl_donut/env/state.py` |
-| 8. Debug viewer and speed check | next | — |
+| 8. Debug viewer and speed check | done | `scripts/view_match.py`, `scripts/bench_engine.py` |
 
 ---
 
@@ -579,12 +580,12 @@ control coarse.
 ### Measured
 
 64 full matches (900 steps each) on val maps, random actions aimed roughly at an enemy,
-starting from the real spawns, on the laptop at load average 3.5:
+starting from the real spawns (speed: see step 8):
 
-| Format | Time | Match decision steps/s | Kills | Falls (credited) | Draws |
-|---|---|---|---|---|---|
-| 1v1 | 0.4 s | ~144,000 | 2 | 12 (1) | 62 of 64 |
-| 2v2 | 0.5 s | ~108,000 | 3 | 23 (1) | 61 of 64 |
+| Format | Kills | Falls (credited) | Draws |
+|---|---|---|---|
+| 1v1 | 2 | 12 (1) | 62 of 64 |
+| 2v2 | 3 | 23 (1) | 61 of 64 |
 
 Random agents starting from hidden spawns rarely meet, so almost every match is a draw: a
 win/loss reward alone would give an untrained agent almost no signal. Shaping and the
@@ -603,3 +604,52 @@ curriculum (Phase 5) carry early learning.
   batch of 5; with spread off, mirrored actions keep a match mirrored (3,000+ checked steps);
 - over two full 2v2 matches on 20 maps: score = kills = deaths − falls + credited falls,
   damage dealt = damage taken, and `outcome` follows the score.
+
+---
+
+## Step 8: Debug viewer and speed check (scripts only)
+
+### Watching a match (`scripts/view_match.py`)
+
+Plays one match with simple scripted fighters and saves `outputs/match.gif` (real time,
+15 frames per second) and a filmstrip `outputs/match.png`. The fighters move at random,
+changing their mind about twice a second, aim at the nearest enemy they can see and fire
+while it stays in sight. `--close` starts team B on top of team A so fights happen at once.
+
+Each frame shows the map and kill line (dotted), both teams' spawns (faint triangles),
+agents in team colours with an aim line, health (green) and fuel (orange) bars, a white
+outline during spawn protection, shots (red = hit, yellow = stopped by rock or range),
+"killed" / "fell" labels, death markers while waiting to respawn, the clock and the score.
+
+**Why matplotlib.** It is already our tool for pictures (E2), needs nothing new (GIFs use
+Pillow, which matplotlib installs), and the output drops straight into docs and reviews.
+A live window (pygame) or a proper renderer is Phase 4's decision; MP4 would need ffmpeg.
+Rendering 15 s of a 2v2 match takes about 10 s.
+
+### Speed (`scripts/bench_engine.py`)
+
+Match decision steps per second (one step = 2 ticks), random actions with every agent
+aiming roughly at an enemy and pulling the trigger half the time, one process, on the
+Apple M4 laptop at load average 4:
+
+| Format | Matches | Match steps/s | ms per batch step | physics | rifle | life | other |
+|---|---|---|---|---|---|---|---|
+| 1v1 | 1 | 1,704 | 0.59 | 77% | 6% | 9% | 7% |
+| 1v1 | 16 | 24,191 | 0.66 | 71% | 13% | 9% | 7% |
+| 1v1 | 64 | 73,689 | 0.87 | 59% | 25% | 8% | 8% |
+| 1v1 | 256 | 156,900 | 1.63 | 39% | 46% | 6% | 9% |
+| 2v2 | 1 | 1,661 | 0.60 | 76% | 7% | 10% | 7% |
+| 2v2 | 16 | 21,298 | 0.75 | 65% | 19% | 8% | 8% |
+| 2v2 | 64 | 55,199 | 1.16 | 47% | 38% | 7% | 8% |
+| 2v2 | 256 | 90,800 | 2.82 | 28% | 59% | 5% | 8% |
+
+- **The bar is met:** 1v1 at 64 matches runs about 73,700 match steps/s, against the agreed
+  50,000. Repeated runs agree within 3%, but the same laptop measured twice that an hour
+  earlier, so always compare numbers taken in the same session.
+- **Batching is what makes it fast.** One match costs about 0.6 ms per step, almost all of
+  it numpy's fixed cost per operation; 64 matches cost only 1.5× as much as one.
+- **The rifle is the part that grows.** Shots are resolved one at a time in Python (P15), so
+  at 256 matches the rifle takes 46–59% of the time. It is the first place to speed up
+  (numba, or batching the ray-box tests) if Phase 3 needs more; physics stays vectorized.
+- These numbers are the engine alone. Observations and the neural network come on top
+  in Phase 3, whose speed benchmark sets the compute targets.

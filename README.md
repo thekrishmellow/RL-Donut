@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine): steps 1–7 of 8 done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Next: Phase 3 (RL interface).
 
 ## Documentation
 
@@ -40,6 +40,8 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/preview_physics.py                    # one tank's flight paths vs the generator's needs -> outputs/physics_preview.png
 .venv/bin/python scripts/route_check.py                        # route bot flies 2,000 generator routes; failures -> outputs/route_failures.png
 .venv/bin/python scripts/preview_rifle.py --count 3            # fans of rifle shots on real maps -> outputs/rifle_preview.png
+.venv/bin/python scripts/view_match.py --team-size 2 --close   # watch a match: outputs/match.gif and a filmstrip outputs/match.png
+.venv/bin/python scripts/bench_engine.py                       # engine speed by batch size, split by component
 ```
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
@@ -59,7 +61,7 @@ RL-Donut/
 ├── pyproject.toml             Package + pytest config
 ├── src/rl_donut/
 │   ├── env/                   Phase 2: game engine (many matches per batch)
-│   │   ├── config.py          EngineConfig and PhysicsConfig: team size, tick rate, hitbox, physics constants
+│   │   ├── config.py          EngineConfig and its parts: physics, rifle, life, match settings
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
 │   │   ├── physics.py         One tick: controls, gravity, jetpack, speed limits, fuel
@@ -90,6 +92,8 @@ RL-Donut/
 │   ├── preview_physics.py
 │   ├── route_check.py
 │   ├── preview_rifle.py
+│   ├── view_match.py          Debug viewer: one match as a GIF and a filmstrip
+│   ├── bench_engine.py        Engine speed check
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
 ├── map_cache/                 Resumable build chunks (git-ignored)

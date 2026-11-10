@@ -48,7 +48,7 @@ Each step ends with a test or picture; its decisions are discussed when it start
 5. Aiming and hitscan rifle (uses `geometry.line_of_sight`, M40) — done
 6. Health, death and respawn — done
 7. Match loop: tick order, timer, scoring, action repeat, event log; determinism test — done
-8. Debug viewer (script only) and engine speed check — next
+8. Debug viewer (script only) and engine speed check — done
 
 ## Decisions
 
@@ -135,6 +135,8 @@ Each step ends with a test or picture; its decisions are discussed when it start
 | P24 | Match format | 60 s timed deathmatch; kills score for the team; more kills wins, equal is a draw, no overtime; a finished match must be reset before it is stepped again | A fixed length keeps batched matches in step; first-to-N would vary episode length |
 | P25 | Pit-fall scoring | The last enemy to damage the faller within 3 s (`fall_credit_window`) scores; otherwise nobody | Knocking someone into a pit counts; accidents give nothing. Death records keep the facts, so the reward (G4, Phase 5) can still use its own rule |
 | P26 | New maps mid-batch | `World.load_maps(matches, maps)` swaps maps into chosen matches and restarts only those | Phase 3 can restart a finished match on a new map while the batch plays on |
+| P27 | Debug viewer | `scripts/view_match.py`: matplotlib, saves a GIF and a filmstrip PNG, simple scripted fighters | No new dependency (Pillow comes with matplotlib); pictures drop into docs. A live window or real renderer is Phase 4's decision |
+| P28 | Engine speed check | `scripts/bench_engine.py`, results in `docs/engine.md`, no timing assertion in tests; bar ≥ 50,000 match decision steps/s at 64 matches 1v1 | The laptop's load swings, so timing tests would fail at random. Measured 73,700 (1v1) and 55,200 (2v2) at 64 matches; the per-shot Python rifle is 25–59% of the time and the first thing to speed up |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits
