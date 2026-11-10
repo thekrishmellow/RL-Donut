@@ -65,6 +65,20 @@ class LifeConfig:
 
 
 @dataclass(frozen=True)
+class MatchConfig:
+    # Timed deathmatch: most kills when time runs out wins, equal is a draw.
+    duration: float = 60.0
+    # Agents decide every this many ticks; each action is held until the next decision.
+    decision_ticks: int = 2
+    # A pit fall scores for the last enemy to damage the faller within this many seconds.
+    fall_credit_window: float = 3.0
+
+    def __post_init__(self):
+        if self.duration <= 0 or self.decision_ticks < 1 or self.fall_credit_window < 0:
+            raise ValueError("match settings must be positive")
+
+
+@dataclass(frozen=True)
 class EngineConfig:
     # Agents per team: 1 for 1v1, 2 for 2v2.
     team_size: int = 1
@@ -77,6 +91,7 @@ class EngineConfig:
     physics: PhysicsConfig = field(default_factory=PhysicsConfig)
     rifle: RifleConfig = field(default_factory=RifleConfig)
     life: LifeConfig = field(default_factory=LifeConfig)
+    match: MatchConfig = field(default_factory=MatchConfig)
     map: MapConfig = field(default_factory=MapConfig)
 
     def __post_init__(self):
@@ -94,9 +109,12 @@ class EngineConfig:
             raise ValueError("every speed limit must stay under one tile per tick")
         life = self.life
         for seconds in (self.rifle.shot_interval, self.rifle.reload_time, life.regen_delay,
-                        life.respawn_time, life.protection_time):
+                        life.respawn_time, life.protection_time, self.match.duration,
+                        self.match.fall_credit_window):
             if abs(seconds * self.tick_rate - round(seconds * self.tick_rate)) > 1e-9:
-                raise ValueError("rifle and respawn times must be whole numbers of ticks")
+                raise ValueError("rifle, respawn and match times must be whole numbers of ticks")
+        if self.ticks(self.match.duration) % self.match.decision_ticks:
+            raise ValueError("match duration must be a whole number of decisions")
 
     def ticks(self, seconds: float) -> int:
         return round(seconds * self.tick_rate)

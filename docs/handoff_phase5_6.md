@@ -26,7 +26,7 @@ numbers from the first design spec, re-examined in their step).
 ```mermaid
 flowchart LR
     subgraph A[Team A: engine and interface]
-        A2[Phase 2 steps 7-8<br/>match loop, speed] --> A3[Phase 3<br/>observations, actions, env API]
+        A2[Phase 2 step 8<br/>viewer, speed check] --> A3[Phase 3<br/>observations, actions, env API]
         A3 --> A4[Phase 4<br/>bots, renderer, replays]
     end
     subgraph B[Team B: learning]
@@ -80,11 +80,17 @@ an array of shape (matches, agents), agents ordered team A first (`[A, B]` in 1v
 | Rifle | `env/rifle.py` | `fire(world, aim, trigger) -> list[Shot]`; hitscan, 15 damage, 0.2 s between shots, 30 rounds, 1.5 s reload, 30-tile range, ±2° spread, no friendly fire; aim is any angle in radians (0 = right, π/2 = down) |
 | Life | `env/life.py` | `life_tick(world, shots) -> LifeEvents` (damage dealt and taken, `Death`s, respawns); same-tick hits applied together; a fall's `Death` has no killer but records the last damager and when (for G4) |
 
-Still to come from Team A (steps 7–8): the match loop (timer, scoring, decision every 2
-ticks, event log), determinism test, debug viewer and speed check.
+| Match | `env/match.py` | `match_step(world, move, jet, aim, trigger) -> MatchEvents`: one decision step (2 ticks) for every match; 60 s deathmatch, `World.score`, `done`, `outcome`; `MatchEvents` has exactly the event fields of section 4.2; `World.load_maps` restarts chosen matches on new maps |
 
-A stand-in environment (step 5.2) can already chain the real pieces each tick:
-`physics_tick` → `fire` → `life_tick`.
+Still to come from Team A (step 8): debug viewer and speed check; then Phase 3 wraps
+`match_step` with observations into the real `MatchEnv`.
+
+A stand-in environment (step 5.2) only needs to add observations and auto-reset around
+`match_step`.
+
+**Measured:** random actions from the real spawns give 62 draws in 64 1v1 matches, because
+agents starting on hidden spawns rarely meet. A win/loss reward alone gives an untrained
+agent almost no signal; shaping and the curriculum must carry early learning.
 
 ### Numbers Team B will care about (draft unless marked)
 
@@ -216,7 +222,7 @@ design (Phase 5) and style policies (Phase 7) can then change without touching t
 class Events:                # every array (M, A) unless noted, for this decision step
     damage_dealt: np.ndarray     # float, health removed from enemies
     damage_taken: np.ndarray     # float
-    kills: np.ndarray            # int, enemies this agent killed (pit falls: see G4)
+    kills: np.ndarray            # int, kills credited to this agent (pit falls: P25)
     deaths: np.ndarray           # int, 0 or 1
     fell: np.ndarray             # bool, died by falling through a pit
     shots: np.ndarray            # int, shots fired
@@ -224,7 +230,9 @@ class Events:                # every array (M, A) unless noted, for this decisio
     outcome: np.ndarray          # (M, 2) int: +1 win, -1 loss, 0 draw per team, only where done; 0 elsewhere
 ```
 
-Who gets the kill when an agent falls into a pit is open (G4, decided in Phase 5).
+For the **match score**, a pit fall counts as a kill for the last enemy to damage the faller
+within 3 s (P25), and `kills` includes those. The **reward** for falls is still Phase 5's
+choice (G4): `death_log` records each death's raw facts (last damager, ticks since).
 
 ### 4.3 Policies: one interface for learners, snapshots and bots
 
@@ -273,7 +281,7 @@ Loading a checkpoint whose `spec_version` differs from the env's must fail loudl
 `tests/test_env_contract.py` (written by Team B in step 5.2, owned jointly) checks any
 environment factory against sections 4.1–4.4: shapes and dtypes, auto-reset, seeding
 (same seed → same observations and events), `final_obs` on ended matches, events adding up
-over a match (kills of one side = deaths of the other, minus falls per G4), `outcome` only
+over a match (kills = deaths − falls + credited falls, as `tests/test_match.py` checks), `outcome` only
 on `done`, `spec_version` present. It runs against the stand-in now and against the real
 env at merge; the merge is done when both pass.
 
@@ -302,9 +310,9 @@ Decisions:
 Build: `rl_donut.rl.stand_in.StandInEnv` following section 4, plus
 `tests/test_env_contract.py`.
 
-- Reuse the real engine where it exists: `World`, `physics_tick`, `fire`, `life_tick`. Add
-  only what's missing until step 2.7 lands: a 60 s timer, kills as the score, and holding
-  each action for 2 ticks.
+- Reuse the real engine: `World` and `match_step` already play full matches with real
+  physics, rifle, health, respawn and scoring. Add observations and auto-reset
+  (`World.load_maps`).
 - Observations: a simple version of the Phase 3 draft (self state, relative enemy position
   if in line of sight, a few rays). Keep it behind one function so it's easy to delete.
 - Actions: `(3, 2, A, 2)`, move, jetpack, aim, shoot, with the aim part size `A`

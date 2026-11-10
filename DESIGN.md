@@ -47,8 +47,8 @@ Each step ends with a test or picture; its decisions are discussed when it start
 4. Route check (a scripted bot flies generator routes on many seeds, M4b): 99.80% arrive — done
 5. Aiming and hitscan rifle (uses `geometry.line_of_sight`, M40) — done
 6. Health, death and respawn — done
-7. Match loop: tick order, timer, scoring, action repeat, event log; determinism test — next
-8. Debug viewer (script only) and engine speed check
+7. Match loop: tick order, timer, scoring, action repeat, event log; determinism test — done
+8. Debug viewer (script only) and engine speed check — next
 
 ## Decisions
 
@@ -131,6 +131,10 @@ Each step ends with a test or picture; its decisions are discussed when it start
 | P20 | Health and death | 100 health; regenerates 10/s after 3 s without damage; death at 0 health or below the kill line; a fall has no killer in the engine but records the last damager and how long before | Regeneration per G2; 13 s from almost dead to full makes retreat a real choice against a 1.2 s time to kill. Fall credit is G4's decision (Phase 5), so the engine only records the facts |
 | P21 | Respawn | After 2 s, at a random own spawn no living enemy can see (`line_of_sight` centre to centre, any distance), else the one farthest from the nearest enemy; full health, fuel and ammo, aim towards the centre | Prevents spawn camping; random choice avoids a predictable spawn. Fallback used 5 times in 303 respawns of random fights |
 | P22 | Spawn protection | 1 s without damage after respawning; firing ends it | As in Mini Militia; stops protection being used to attack for free |
+| P23 | Decision rate | Agents decide every 2 ticks (15/s); each action is held for both; tick order physics → rifle → life | About human reaction time; 900 steps per 60 s match. Every tick doubles learning steps for little gain; every 3 ticks makes aim and jetpack coarse |
+| P24 | Match format | 60 s timed deathmatch; kills score for the team; more kills wins, equal is a draw, no overtime; a finished match must be reset before it is stepped again | A fixed length keeps batched matches in step; first-to-N would vary episode length |
+| P25 | Pit-fall scoring | The last enemy to damage the faller within 3 s (`fall_credit_window`) scores; otherwise nobody | Knocking someone into a pit counts; accidents give nothing. Death records keep the facts, so the reward (G4, Phase 5) can still use its own rule |
+| P26 | New maps mid-batch | `World.load_maps(matches, maps)` swaps maps into chosen matches and restarts only those | Phase 3 can restart a finished match on a new map while the batch plays on |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

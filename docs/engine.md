@@ -29,8 +29,8 @@ The map generator assumed these when it decided which maps are valid. Each one b
 | 4. Route check | done | `src/rl_donut/env/navigation.py`, `scripts/route_check.py` |
 | 5. Aiming and hitscan rifle | done | `src/rl_donut/env/rifle.py`, `src/rl_donut/env/config.py` |
 | 6. Health, death and respawn | done | `src/rl_donut/env/life.py`, `src/rl_donut/env/config.py` |
-| 7. Match loop | next | — |
-| 8. Debug viewer and speed check | planned | — |
+| 7. Match loop | done | `src/rl_donut/env/match.py`, `src/rl_donut/env/state.py` |
+| 8. Debug viewer and speed check | next | — |
 
 ---
 
@@ -531,3 +531,75 @@ of each other: 286 kills, 17 pit falls, 303 respawns; 45 deaths were same-tick t
   living agents never enter rock, nobody stays dead longer than 2 s, damage dealt equals
   damage taken;
 - the same inputs give the same match, bit for bit.
+
+---
+
+## Step 7: Match loop (`match.py`)
+
+`match_step(world, move, jet, aim, trigger)` plays one **decision step** in every match of
+the batch and returns `MatchEvents`.
+
+### One decision step
+
+Each agent's action is held for 2 ticks. Every tick runs physics, then the rifles, then
+health, death and respawn, then advances the match clock. The step's events are the sums
+over its ticks:
+
+| Field | Shape | Meaning |
+|---|---|---|
+| `damage_dealt`, `damage_taken` | (M, A) | Health removed from enemies / from this agent |
+| `kills`, `deaths` | (M, A) | Kills credited (pit falls included) and deaths |
+| `fell` | (M, A) | Died by falling through a pit |
+| `shots`, `hits` | (M, A) | Shots fired, and shots that hit an enemy (protected or not) |
+| `done` | (M,) | The match ended on this step |
+| `outcome` | (M, 2) | +1 win, −1 loss, 0 draw per team, only where `done` |
+| `shot_log`, `death_log`, `respawn_log` | lists | Every shot, death (with who scored) and respawn, with its tick, for replays |
+
+These are the event fields agreed with Phases 5–6 in
+[`handoff_phase5_6.md`](handoff_phase5_6.md) (section 4.2).
+
+**Why 2 ticks per decision.** 15 decisions a second (every 67 ms) is about human reaction
+time, and a 60 s match is 900 steps. Deciding every tick doubles the learning steps for
+little gain (the rifle fires every 6 ticks anyway); every 3 ticks makes aiming and jetpack
+control coarse.
+
+### The match
+
+- A **60 s timed deathmatch**: kills score for the killer's team; when time runs out the
+  team with more kills wins and equal kills is a draw, with no overtime. A fixed length
+  keeps a batch of matches in step.
+- **Pit falls** score for the last enemy to damage the faller, if that was within the last
+  3 s (`fall_credit_window`); otherwise nobody scores. Knocking someone into a pit counts,
+  an accidental fall gives the enemy nothing. Each `DeathRecord` keeps the raw facts, so
+  Phase 5's reward can still choose its own rule (G4).
+- `match_step` refuses to play a match whose time is up: it must be `reset`, or given a new
+  map with `World.load_maps(matches, maps)`, which swaps in the maps and restarts only those
+  matches while the rest of the batch plays on.
+
+### Measured
+
+64 full matches (900 steps each) on val maps, random actions aimed roughly at an enemy,
+starting from the real spawns, on the laptop at load average 3.5:
+
+| Format | Time | Match decision steps/s | Kills | Falls (credited) | Draws |
+|---|---|---|---|---|---|
+| 1v1 | 0.4 s | ~144,000 | 2 | 12 (1) | 62 of 64 |
+| 2v2 | 0.5 s | ~108,000 | 3 | 23 (1) | 61 of 64 |
+
+Random agents starting from hidden spawns rarely meet, so almost every match is a draw: a
+win/loss reward alone would give an untrained agent almost no signal. Shaping and the
+curriculum (Phase 5) carry early learning.
+
+**Tests** (`tests/test_match.py`):
+
+- invalid settings and durations that aren't whole decisions are rejected;
+- a step holds the action for 2 ticks; matches end after exactly 900 steps, a finished match
+  must be restarted, and nobody scoring is a draw; a held trigger fires every 3 steps;
+- kills score and decide the match; a trade scores for both teams;
+- a fall 10 steps after damage scores for the damager, one after the 3 s window doesn't, and
+  an accidental fall scores for nobody;
+- `load_maps` restarts only the given matches, exactly like a fresh world on that map;
+- the same seed gives the same match; a match plays out bit for bit the same alone and in a
+  batch of 5; with spread off, mirrored actions keep a match mirrored (3,000+ checked steps);
+- over two full 2v2 matches on 20 maps: score = kills = deaths − falls + credited falls,
+  damage dealt = damage taken, and `outcome` follows the score.

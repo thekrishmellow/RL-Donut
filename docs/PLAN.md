@@ -63,7 +63,7 @@ tooling, `M` map generator; later phases add their own letters).
 |---|---|---|---|
 | 0 | Project setup | — | done |
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
-| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–6 done, step 7 next) |
+| 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | **in progress** (steps 1–7 done, step 8 next) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | planned |
 | 4 | Scripted bots, renderer, replay files | — | planned |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
@@ -161,14 +161,14 @@ shooting because a failure there would change the generator and force a rebuild 
 | Area | Status | Design |
 |---|---|---|
 | World | approved (P1–P3, P6) | 96 × 48 tile grid, 1 tile = 1 world unit; many matches per batch; solid outside the map except below the bottom edge |
-| Timing | draft | 30 physics ticks per second; agent decides every 2 ticks (15 decisions/s); 60 s matches |
+| Timing | approved (P23, P24) | 30 physics ticks per second; agent decides every 2 ticks (15 decisions/s); 60 s matches |
 | Body and collision | approved (P4, P5, P7) | Hitbox 0.8 × 1.6 tiles; one axis at a time against tiles; agents pass through each other |
 | Movement | approved (P8–P10) | Run 6 tiles/s (set directly); gravity 25 tiles/s²; thrust 40 tiles/s²; rising limit 12, falling limit 20 tiles/s |
 | Fuel | approved (P8) | 100; drains 32/s while thrusting, refills 25/s while standing |
 | Rifle | approved (P15–P18) | Hitscan from the hitbox centre, checked with the generator's `line_of_sight`; 15 damage; 0.2 s between shots; uniform ±2° spread; 30-round magazine, 1.5 s auto-reload, unlimited reserve; 30-tile range; no friendly fire; aim at any angle, instantly |
 | Health | approved (P19, P20) | 100; regenerates 10/s after 3 s without damage (on, per G2); same-tick hits applied together; death at 0 health or below the kill line |
 | Respawn | approved (P21, P22) | 2 s, at a random own spawn no living enemy can see; 1 s protection, ended by firing |
-| Match | draft | Timed deathmatch with respawns; most kills wins, equal is a draw |
+| Match | approved (P24–P26) | Timed deathmatch with respawns; most kills wins, equal is a draw; a pit fall scores for the last enemy to damage the faller within 3 s |
 | Out of scope for v1 | draft | Grenades (first v2 addition), pickups, weapon switching, melee, zoom, dual wield |
 
 Required tests, from Phase 1 contracts: climb at least `climb_budget` on one tank; motion
@@ -182,7 +182,8 @@ independent check, and no agent on a spawn can hit an agent on an enemy spawn (P
 
 Still open:
 
-- How falling through a pit is scored (G4, Phase 5).
+- How a pit fall is rewarded (G4, Phase 5); the match score already credits the last
+  damager within 3 s (P25).
 - Gravity and thrust randomization (Phase 3): ±15% on both drops level flight to 22 tiles,
   below the generator's 24, so the ranges must be narrowed or tied together.
 

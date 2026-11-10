@@ -26,6 +26,17 @@ def spawn_centre(spawn: Spawn, cfg: EngineConfig) -> tuple[float, float]:
     return spawn.x + clearance.clearance_w / 2, spawn.y + clearance.clearance_h - cfg.hitbox_h / 2
 
 
+def map_arrays(maps: list[GeneratedMap], cfg: EngineConfig):
+    """Per-match map data: seeds, rock grids, kill lines and spawn hitbox centres."""
+    shape = (cfg.map.height, cfg.map.width)
+    if any(m.grid.shape != shape for m in maps):
+        raise ValueError(f"every map must be {shape[0]} x {shape[1]} to share one batch")
+    spawns = np.array([[[spawn_centre(s, cfg) for s in team]
+                        for team in (m.spawns.team_a, m.spawns.team_b)] for m in maps])
+    return (np.array([m.seed for m in maps]), np.stack([m.grid for m in maps]).astype(bool),
+            np.array([m.kill_y for m in maps], dtype=np.float64), spawns)
+
+
 @dataclass(frozen=True)
 class AgentView:
     """One agent's state, for tests and debugging."""
@@ -55,6 +66,7 @@ class World:
     kill_y: np.ndarray      # (M,)
     spawns: np.ndarray      # (M, 2, per_team, 2) spawn hitbox centres as (x, y), per team
     tick: np.ndarray        # (M,) ticks played
+    score: np.ndarray       # (M, 2) kills per team
     team: np.ndarray        # (A,) team of each agent slot
     x: np.ndarray           # (M, A)
     y: np.ndarray
@@ -82,19 +94,11 @@ class World:
         cfg = cfg or EngineConfig()
         if not maps:
             raise ValueError("need at least one map")
-        shape = (cfg.map.height, cfg.map.width)
-        if any(m.grid.shape != shape for m in maps):
-            raise ValueError(f"every map must be {shape[0]} x {shape[1]} to share one batch")
-        spawns = np.array([[[spawn_centre(s, cfg) for s in team]
-                            for team in (m.spawns.team_a, m.spawns.team_b)] for m in maps])
+        seeds, grids, kill_y, spawns = map_arrays(maps, cfg)
         n, k = len(maps), cfg.n_agents
         world = cls(
-            cfg=cfg,
-            seeds=np.array([m.seed for m in maps]),
-            grids=np.stack([m.grid for m in maps]).astype(bool),
-            kill_y=np.array([m.kill_y for m in maps], dtype=np.float64),
-            spawns=spawns,
-            tick=np.zeros(n, dtype=np.int64),
+            cfg=cfg, seeds=seeds, grids=grids, kill_y=kill_y, spawns=spawns,
+            tick=np.zeros(n, dtype=np.int64), score=np.zeros((n, 2), dtype=np.int64),
             team=np.repeat([TEAM_A, TEAM_B], cfg.team_size),
             x=np.zeros((n, k)), y=np.zeros((n, k)), vx=np.zeros((n, k)), vy=np.zeros((n, k)),
             fuel=np.zeros((n, k)), alive=np.ones((n, k), dtype=bool),
@@ -115,6 +119,17 @@ class World:
     @property
     def n_matches(self) -> int:
         return len(self.seeds)
+
+    def load_maps(self, matches, maps: list[GeneratedMap]) -> None:
+        """Put new maps into the given matches and start them; the rest of the batch is untouched."""
+        matches = np.asarray(matches)
+        if len(matches) != len(maps):
+            raise ValueError("need one map per match")
+        if not len(maps):
+            return
+        self.seeds[matches], self.grids[matches], self.kill_y[matches], self.spawns[matches] = map_arrays(maps, self.cfg)
+        self.episode[matches] = -1
+        self.reset(matches)
 
     def reset(self, matches: np.ndarray | None = None) -> None:
         """Start the given matches (default: all) from tick 0, agent `i` of each team on spawn `i`.
@@ -138,6 +153,7 @@ class World:
         self.last_damager[matches] = -1
         self.respawn[matches] = self.protection[matches] = 0
         self.tick[matches] = 0
+        self.score[matches] = 0
         for m in matches:
             self.episode[m] += 1
             self.rngs[m] = np.random.default_rng([self.rng_seed, int(self.seeds[m]), int(self.episode[m])])
