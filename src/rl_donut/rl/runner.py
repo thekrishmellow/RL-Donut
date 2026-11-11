@@ -1,14 +1,14 @@
 """Rollout runner and training loop coordinating learner and opponents."""
 
 from dataclasses import dataclass
-from typing import Any
 import numpy as np
 import torch
 
+from rl_donut.env.match_env import MatchEnv
+from rl_donut.env.policy import Policy, PolicyContext
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.ppo import PPOTrainer, compute_gae
 from rl_donut.rl.rewards import RewardWeights, anneal_alpha, compute_reward
-from rl_donut.rl.stand_in import Policy, PolicyContext, StandInEnv
 
 
 @dataclass
@@ -26,11 +26,11 @@ class RolloutMetrics:
 
 
 class Runner:
-    """Manages the rollout collection and policy updates for PPO vs an opponent."""
+    """Collects rollouts on MatchEnv and updates the learner with PPO."""
 
     def __init__(
         self,
-        env: StandInEnv,
+        env: MatchEnv,
         learner: ActorCritic,
         opponent: Policy,
         trainer: PPOTrainer,
@@ -39,6 +39,8 @@ class Runner:
         total_training_steps: int = 100_000,
         device: torch.device | None = None,
     ):
+        if learner.cont_dim != env.action_cont_dim:
+            raise ValueError("learner aim head and the environment's continuous action size disagree")
         self.env = env
         self.learner = learner
         self.opponent = opponent
@@ -49,27 +51,25 @@ class Runner:
         self.device = device or torch.device("cpu")
 
         self.global_step = 0
-        self.rng = np.random.default_rng(env.seed)
+        self.rng = np.random.default_rng(getattr(env, "seed", env.world.rng_seed))
 
-        # Precompute learner and opponent slots per match (alternating sides)
-        # Match m: learner is team (m % 2), opponent is team 1 - (m % 2)
+        # Match m: the learner takes team (m % 2), so both sides are trained equally.
         M, A = env.n_matches, env.n_agents
-        self.team_size = env.team_size
+        self.team_size = env.n_agents // 2
         self.learner_slots = []
         self.opponent_slots = []
 
         for m in range(M):
             learner_team = m % 2
             opp_team = 1 - learner_team
-            l_agents = [a for a in range(A) if env.team[a] == learner_team]
-            o_agents = [a for a in range(A) if env.team[a] == opp_team]
-            for a in l_agents:
-                self.learner_slots.append((m, a))
-            for a in o_agents:
-                self.opponent_slots.append((m, a))
+            for a in range(A):
+                if env.team[a] == learner_team:
+                    self.learner_slots.append((m, a))
+                elif env.team[a] == opp_team:
+                    self.opponent_slots.append((m, a))
 
-        self.learner_slots = np.array(self.learner_slots)    # (M * team_size, 2)
-        self.opponent_slots = np.array(self.opponent_slots)  # (M * team_size, 2)
+        self.learner_slots = np.array(self.learner_slots)
+        self.opponent_slots = np.array(self.opponent_slots)
         self.n_learner_envs = len(self.learner_slots)
 
         self.last_obs = env.reset()
@@ -81,15 +81,23 @@ class Runner:
     def _extract_slots(self, arr: np.ndarray, slots: np.ndarray) -> np.ndarray:
         return arr[slots[:, 0], slots[:, 1]]
 
+    def _value(self, obs: np.ndarray) -> np.ndarray:
+        with torch.no_grad():
+            tensor = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(self.device)
+            return self.learner.get_value(tensor).cpu().numpy().squeeze(-1)
+
     def step_rollout(self) -> RolloutMetrics:
-        """Collect one rollout buffer of n_steps, compute GAE and perform PPO update."""
+        """Collect one rollout of n_steps, bootstrap truncated matches, and update."""
         steps = self.n_steps
         N_L = self.n_learner_envs
         obs_dim = self.env.obs_dim
         action_dim = len(self.env.action_nvec)
+        cont_dim = self.env.action_cont_dim
+        gamma = self.trainer.cfg.gamma
 
         buf_obs = np.zeros((steps, N_L, obs_dim), dtype=np.float32)
         buf_actions = np.zeros((steps, N_L, action_dim), dtype=np.int64)
+        buf_cont = np.zeros((steps, N_L, cont_dim), dtype=np.float32)
         buf_log_probs = np.zeros((steps, N_L), dtype=np.float32)
         buf_rewards = np.zeros((steps, N_L), dtype=np.float32)
         buf_dones = np.zeros((steps, N_L), dtype=bool)
@@ -101,43 +109,46 @@ class Runner:
             self.global_step += N_L
             alpha = anneal_alpha(self.global_step, self.total_training_steps)
 
-            # 1. Split observations
             l_obs = self._extract_slots(cur_obs, self.learner_slots)
             o_obs = self._extract_slots(cur_obs, self.opponent_slots)
 
-            # 2. Get actions from learner model
             with torch.no_grad():
                 l_obs_t = torch.from_numpy(l_obs).float().to(self.device)
-                l_actions_t, l_log_probs_t, _, l_values_t = self.learner.get_action_and_value(l_obs_t)
+                l_disc_t, l_cont_t, l_log_probs_t, _, l_values_t = self.learner.get_action_and_value(l_obs_t)
 
-            l_actions = l_actions_t.cpu().numpy()
+            l_actions = l_disc_t.cpu().numpy()
+            l_cont = l_cont_t.cpu().numpy().astype(np.float32)
             l_log_probs = l_log_probs_t.cpu().numpy()
             l_values = l_values_t.cpu().numpy().squeeze(-1)
 
-            # 3. Get actions from opponent policy
             ctx = PolicyContext(env=self.env, slots=self.opponent_slots, rng=self.rng)
-            o_actions = self.opponent.act(o_obs, ctx)
+            o_actions, o_cont = self.opponent.act(o_obs, ctx)
 
-            # 4. Assemble full environment action tensor (M, A, action_dim)
-            full_actions = np.zeros((self.env.n_matches, self.env.n_agents, action_dim), dtype=np.int64)
-            full_actions[self.learner_slots[:, 0], self.learner_slots[:, 1]] = l_actions
-            full_actions[self.opponent_slots[:, 0], self.opponent_slots[:, 1]] = o_actions
+            full_discrete = np.zeros((self.env.n_matches, self.env.n_agents, action_dim), dtype=np.int64)
+            full_cont = np.zeros((self.env.n_matches, self.env.n_agents, cont_dim), dtype=np.float32)
+            full_discrete[self.learner_slots[:, 0], self.learner_slots[:, 1]] = l_actions
+            full_cont[self.learner_slots[:, 0], self.learner_slots[:, 1]] = l_cont
+            full_discrete[self.opponent_slots[:, 0], self.opponent_slots[:, 1]] = o_actions
+            full_cont[self.opponent_slots[:, 0], self.opponent_slots[:, 1]] = o_cont
 
-            # 5. Advance environment
-            res = self.env.step(full_actions)
+            res = self.env.step(full_discrete, full_cont)
 
-            # 6. Compute rewards
             full_rewards = compute_reward(res.events, self.env.team, alpha=alpha, weights=self.weights)
             l_rewards = self._extract_slots(full_rewards, self.learner_slots)
-
-            # 7. Check terminations (match ends)
             l_dones = res.done[self.learner_slots[:, 0]]
 
-            # Store in buffer
+            # The timer truncates the match. Fold V(final_obs) into the reward and
+            # mark the step done so the advantage chain stops without dropping that value.
+            stored = l_rewards
+            if l_dones.any():
+                v_final = self._value(self._extract_slots(res.final_obs, self.learner_slots))
+                stored = l_rewards + gamma * v_final * l_dones.astype(np.float32)
+
             buf_obs[t] = l_obs
             buf_actions[t] = l_actions
+            buf_cont[t] = l_cont
             buf_log_probs[t] = l_log_probs
-            buf_rewards[t] = l_rewards
+            buf_rewards[t] = stored
             buf_dones[t] = l_dones
             buf_values[t] = l_values
 
@@ -154,22 +165,15 @@ class Runner:
             cur_obs = res.obs
 
         self.last_obs = cur_obs
-
-        # Compute next value for GAE
-        with torch.no_grad():
-            next_l_obs = self._extract_slots(cur_obs, self.learner_slots)
-            next_l_obs_t = torch.from_numpy(next_l_obs).float().to(self.device)
-            next_values = self.learner.get_value(next_l_obs_t).cpu().numpy().squeeze(-1)
-
-        next_dones = res.done[self.learner_slots[:, 0]]
+        next_values = self._value(self._extract_slots(cur_obs, self.learner_slots))
         advantages, returns = compute_gae(
-            buf_rewards, buf_values, buf_dones, next_values, next_dones,
-            gamma=self.trainer.cfg.gamma, gae_lambda=self.trainer.cfg.gae_lambda
+            buf_rewards, buf_values, buf_dones, next_values, buf_dones[-1],
+            gamma=gamma, gae_lambda=self.trainer.cfg.gae_lambda,
         )
 
-        # Perform PPO update
         update_metrics = self.trainer.update(
-            buf_obs, buf_actions, buf_log_probs, returns, advantages, buf_values
+            buf_obs, buf_actions, buf_log_probs, returns, advantages, buf_values,
+            continuous=buf_cont,
         )
 
         mean_ret = float(np.mean(self.completed_returns[-50:])) if self.completed_returns else 0.0
@@ -187,4 +191,3 @@ class Runner:
             alpha=float(alpha),
             completed_episodes=len(self.completed_returns),
         )
-

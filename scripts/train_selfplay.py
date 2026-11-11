@@ -21,7 +21,7 @@ from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.pool import OpponentPool
 from rl_donut.rl.ppo import LearnedPolicy, PPOConfig, PPOTrainer
 from rl_donut.rl.runner import Runner
-from rl_donut.rl.stand_in import SPEC_VERSION, StandInEnv
+from rl_donut.env.match_env import SPEC_VERSION, MatchEnv
 from rl_donut.rl.styles import CombatStyle, STYLE_CONFIGS
 from rl_donut.rl.watchlist import WatchlistTracker
 
@@ -54,7 +54,7 @@ def main():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    env = StandInEnv(
+    env = MatchEnv(
         n_matches=args.n_matches,
         team_size=args.team_size,
         split=args.split,
@@ -62,7 +62,7 @@ def main():
     )
 
     device = torch.device("cpu")
-    model = ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=256)
+    model = ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=256, cont_dim=env.action_cont_dim)
     cfg = PPOConfig(lr=args.lr)
     trainer = PPOTrainer(model, cfg, device=device)
     ckpt_manager = CheckpointManager(run_dir=run_dir, max_to_keep=5, milestone_interval=50)
@@ -70,7 +70,7 @@ def main():
     pool = OpponentPool(max_snapshots=30, admission_win_rate=0.55)
     # Add initial policy as snapshot 0
     initial_policy = LearnedPolicy(
-        ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=256), name="snapshot_0000"
+        ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=256, cont_dim=env.action_cont_dim), name="snapshot_0000"
     )
     initial_policy.model.load_state_dict(model.state_dict())
     pool.consider_admission(initial_policy, update=0)
@@ -161,7 +161,7 @@ def main():
         # Snapshot evaluation gate
         if update % args.snapshot_interval == 0:
             candidate_policy = LearnedPolicy(
-                ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=256),
+                ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=256, cont_dim=env.action_cont_dim),
                 name=f"candidate_{update:04d}",
             )
             candidate_policy.model.load_state_dict(model.state_dict())

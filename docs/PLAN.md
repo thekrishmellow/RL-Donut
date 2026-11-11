@@ -66,10 +66,10 @@ tooling, `M` map generator; later phases add their own letters).
 | 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | done (steps 1–8) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | done (steps 1–8) |
 | 4 | Scripted bots, renderer, replay files | — | done (steps 1–8) |
-| 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
-| 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | planned |
-| 7 | Adaptive opponents, style policies | 9 | planned |
-| 8 | Generalization evaluation (held-out and OOD maps) | 10 | planned |
+| 5 | Rewards, single-agent PPO against bots | 4, 5 | code on main; stand-in numbers are not results until a MatchEnv run |
+| 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | code on main; the 1v1-versus-2v2 comparison is still open |
+| 7 | Adaptive opponents, style policies | 9 | code on main, ahead of the agreed order; review with the first real run |
+| 8 | Generalization evaluation (held-out and OOD maps) | 10 | code on main; OOD physics uses one tied scale; the split definitions (M49) are still open |
 | 9 | Dashboard | 11 | planned |
 | 10 | Benchmarks and final report | 12 | planned |
 
@@ -348,10 +348,10 @@ renderer, replays); Team B builds Phases 5–6 (rewards, PPO, self-play) on bran
 interface between them, the step list and the merge checklist are in
 [`docs/handoff_phase5_6.md`](handoff_phase5_6.md).
 
-Status (Phase 3 step 5): `phase5-6` already holds Phases 5–8, built on the first draft
-contract. `main` now offers the real `MatchEnv` at contract `spec_version` 0.3 with a shared
-contract test. Section 0 of the handoff guide lists the edits Team B's code needs before the
-merge, the main one being a Gaussian head for the continuous aim.
+Status: the learning code is on `main` and steps `MatchEnv` at spec 0.3, with a Gaussian
+aim head and the Phase 4 bots. `docs/rl.md` still holds the decisions made on the stand-in.
+Those are a starting point. A training run on the real environment, and a review of those
+decisions, come before any of them is logged as approved.
 
 ---
 

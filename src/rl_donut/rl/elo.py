@@ -7,7 +7,7 @@ from typing import Sequence
 import numpy as np
 
 from rl_donut.rl.evaluate import evaluate_policy
-from rl_donut.rl.stand_in import Policy
+from rl_donut.env.policy import Policy
 
 ANCHOR_BOT_NAME = "random_bot"
 ANCHOR_RATING = 1200.0

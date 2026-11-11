@@ -4,7 +4,7 @@ Defines evaluation tiers:
 1. In-distribution train seeds (seeds 0-9,999)
 2. In-distribution held-out val seeds (seeds 10,000-10,999)
 3. Out-of-Distribution (OOD):
-   - Physics parameter shifts: gravity ±25%, jetpack thrust ±25%
+   - Physics scale shifts: gravity and thrust together, at 0.75x and 1.25x
    - Unseen OOD map seeds (seeds 30,000+)
 Computes headline Generalization Gaps:
   Δ_val = win_rate_train - win_rate_val
@@ -19,8 +19,8 @@ import numpy as np
 
 from rl_donut.env.config import EngineConfig, PhysicsConfig
 from rl_donut.mapgen.generator import GeneratedMap, generate_map
+from rl_donut.env.policy import Policy
 from rl_donut.rl.evaluate import EvalReport, evaluate_policy
-from rl_donut.rl.stand_in import Policy
 
 
 @dataclass
@@ -45,33 +45,12 @@ class GeneralizationReport:
 
 
 def get_ood_engine_configs() -> dict[str, EngineConfig]:
-    """Returns physics shift configurations (±25% gravity and thrust)."""
-    base_physics = PhysicsConfig()
+    """Tied gravity and thrust scales. Independent shifts drop level flight below the map's ledges."""
     return {
-        "gravity_low": EngineConfig(
-            physics=PhysicsConfig(
-                gravity=base_physics.gravity * 0.75,
-                thrust=base_physics.thrust,
-            )
-        ),
-        "gravity_high": EngineConfig(
-            physics=PhysicsConfig(
-                gravity=base_physics.gravity * 1.25,
-                thrust=base_physics.thrust,
-            )
-        ),
-        "thrust_low": EngineConfig(
-            physics=PhysicsConfig(
-                gravity=base_physics.gravity,
-                thrust=base_physics.thrust * 0.75,
-            )
-        ),
-        "thrust_high": EngineConfig(
-            physics=PhysicsConfig(
-                gravity=base_physics.gravity,
-                thrust=base_physics.thrust * 1.25,
-            )
-        ),
+        "gravity_low": EngineConfig(physics=PhysicsConfig(scale_range=(0.75, 0.75))),
+        "gravity_high": EngineConfig(physics=PhysicsConfig(scale_range=(1.25, 1.25))),
+        "thrust_low": EngineConfig(physics=PhysicsConfig(scale_range=(0.75, 0.75))),
+        "thrust_high": EngineConfig(physics=PhysicsConfig(scale_range=(1.25, 1.25))),
     }
 
 
@@ -121,7 +100,7 @@ def evaluate_generalization(
 
     ood_win_rates: list[float] = []
 
-    # 3. Physics parameter shifts (±25% gravity and thrust)
+    # 3. Tied physics scale, low and high. Gravity and thrust move together.
     if include_physics_shifts:
         for name, cfg in get_ood_engine_configs().items():
             rep_shift = evaluate_policy(

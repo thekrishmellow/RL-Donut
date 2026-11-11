@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from rl_donut.rl.pool import OpponentPool
-from rl_donut.rl.stand_in import Policy
+from rl_donut.env.policy import Policy
 
 
 @dataclass(frozen=True)

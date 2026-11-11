@@ -16,7 +16,7 @@ from rl_donut.rl.bots import RandomBot, StaticTargetBot
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.ppo import PPOConfig, PPOTrainer
 from rl_donut.rl.runner import Runner
-from rl_donut.rl.stand_in import SPEC_VERSION, StandInEnv
+from rl_donut.env.match_env import SPEC_VERSION, MatchEnv
 
 
 def parse_args():
@@ -50,7 +50,7 @@ def main():
     np.random.seed(args.seed)
 
     # Initialize environment
-    env = StandInEnv(
+    env = MatchEnv(
         n_matches=args.n_matches,
         team_size=args.team_size,
         split=args.split,
@@ -65,7 +65,7 @@ def main():
 
     # Model and trainer
     device = torch.device("cpu")
-    model = ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=256)
+    model = ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=256, cont_dim=env.action_cont_dim)
     cfg = PPOConfig(lr=args.lr, gamma=args.gamma, gae_lambda=args.gae_lambda)
     trainer = PPOTrainer(model, cfg, device=device)
 
@@ -93,6 +93,7 @@ def main():
         "lr": args.lr,
         "obs_dim": env.obs_dim,
         "action_nvec": list(env.action_nvec),
+        "action_cont_dim": env.action_cont_dim,
         "created_at": datetime.now().isoformat(),
     }
     with open(run_dir / "config.json", "w") as f:

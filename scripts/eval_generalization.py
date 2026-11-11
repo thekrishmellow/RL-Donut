@@ -18,7 +18,6 @@ from rl_donut.rl.bots import RandomBot, StaticTargetBot
 from rl_donut.rl.generalization import evaluate_generalization
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.ppo import LearnedPolicy
-from rl_donut.rl.stand_in import StandInEnv
 
 
 def parse_args():
@@ -37,9 +36,10 @@ def main():
     if not ckpt_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
 
-    dummy_env = StandInEnv(n_matches=1, split="val")
-    model = ActorCritic(dummy_env.obs_dim, dummy_env.action_nvec, hidden_dim=256)
     ckpt = torch.load(ckpt_path, map_location="cpu")
+    model = ActorCritic(
+        ckpt["obs_dim"], ckpt["action_nvec"], hidden_dim=256, cont_dim=ckpt.get("cont_dim", 1)
+    )
     if isinstance(ckpt, dict) and "model_state" in ckpt:
         state_dict = ckpt["model_state"]
     elif isinstance(ckpt, dict) and "model_state_dict" in ckpt:

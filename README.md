@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) complete: action space, visibility, observations, the batched `MatchEnv`, the shared contract test, gravity/thrust randomization, the speed benchmark and a PettingZoo wrapper. Phase 4 (bots, replays, renderer) complete: turret and rusher bots, action replays, and a matplotlib viewer.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) complete: action space, visibility, observations, the batched `MatchEnv`, the shared contract test, gravity/thrust randomization, the speed benchmark and a PettingZoo wrapper. Phase 4 (bots, replays, renderer) complete: turret and rusher bots, action replays, and a matplotlib viewer. Phases 5–8 (PPO, self-play, styles, generalization) are on `main` and step `MatchEnv`; their stand-in numbers are not results until a training run on this environment.
 
 ## Documentation
 

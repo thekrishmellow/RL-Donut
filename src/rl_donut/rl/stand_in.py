@@ -2,7 +2,7 @@
 
 This environment lets Team B develop Phase 5 (rewards, PPO, curriculum) and Phase 6
 (self-play, pool, Elo) in parallel while Team A finishes the full engine and interface.
-At the end of Phase 4, MatchEnv replaces StandInEnv with zero changes to training code.
+Training runs on MatchEnv. This module remains so older reward tests can build Events.
 """
 
 from dataclasses import dataclass, field

@@ -9,28 +9,33 @@ from rl_donut.rl.ppo import PPOConfig, PPOTrainer, compute_gae, LearnedPolicy
 
 def test_actor_critic_shapes():
     obs_dim = 32
-    action_nvec = (3, 2, 16, 2)
-    model = ActorCritic(obs_dim, action_nvec, hidden_dim=64)
+    action_nvec = (3, 2, 2)
+    model = ActorCritic(obs_dim, action_nvec, hidden_dim=64, cont_dim=1)
 
     batch_size = 8
     x = torch.randn(batch_size, obs_dim)
 
-    # Test sampling
-    actions, log_prob, entropy, value = model.get_action_and_value(x)
-    assert actions.shape == (batch_size, 4)
+    discrete, continuous, log_prob, entropy, value = model.get_action_and_value(x)
+    assert discrete.shape == (batch_size, 3)
+    assert continuous.shape == (batch_size, 1)
     assert log_prob.shape == (batch_size,)
     assert entropy.shape == (batch_size,)
     assert value.shape == (batch_size, 1)
+    assert torch.isfinite(continuous).all()
 
-    # Actions must be within bounds of action_nvec
     for i, n in enumerate(action_nvec):
-        assert (actions[:, i] >= 0).all() and (actions[:, i] < n).all()
+        assert (discrete[:, i] >= 0).all() and (discrete[:, i] < n).all()
 
-    # Test evaluating given actions
-    given_actions = torch.zeros((batch_size, 4), dtype=torch.long)
-    act2, lp2, ent2, val2 = model.get_action_and_value(x, given_actions)
-    assert (act2 == given_actions).all()
+    given_d = torch.zeros((batch_size, 3), dtype=torch.long)
+    given_c = torch.zeros((batch_size, 1))
+    d2, c2, lp2, _, _ = model.get_action_and_value(x, given_d, given_c)
+    assert torch.equal(d2, given_d) and torch.equal(c2, given_c)
     assert lp2.shape == (batch_size,)
+
+    discrete_only = ActorCritic(obs_dim, (3, 2, 16, 2), hidden_dim=64, cont_dim=0)
+    actions, lp, ent, val = discrete_only.get_action_and_value(x)
+    assert actions.shape == (batch_size, 4)
+    assert lp.shape == (batch_size,) and ent.shape == (batch_size,) and val.shape == (batch_size, 1)
 
 
 def test_compute_gae_known_values():
@@ -57,7 +62,7 @@ def test_ppo_learns_toy_bandit():
 
     obs_dim = 4
     action_nvec = (4,)
-    model = ActorCritic(obs_dim, action_nvec, hidden_dim=32)
+    model = ActorCritic(obs_dim, action_nvec, hidden_dim=32, cont_dim=0)
     cfg = PPOConfig(lr=0.02, n_epochs=4, n_minibatches=1)
     trainer = PPOTrainer(model, cfg)
 
@@ -111,11 +116,12 @@ def test_checkpoint_round_trip(tmp_path: Path):
 
 def test_learned_policy_protocol():
     obs_dim = 8
-    action_nvec = (3, 2, 16, 2)
-    model = ActorCritic(obs_dim, action_nvec, hidden_dim=32)
+    action_nvec = (3, 2, 2)
+    model = ActorCritic(obs_dim, action_nvec, hidden_dim=32, cont_dim=1)
     policy = LearnedPolicy(model, name="agent_v1")
 
     obs = np.zeros((4, obs_dim), dtype=np.float32)
-    actions = policy.act(obs)
-    assert actions.shape == (4, 4)
+    discrete, continuous = policy.act(obs)
+    assert discrete.shape == (4, 3)
+    assert continuous.shape == (4, 1)
 

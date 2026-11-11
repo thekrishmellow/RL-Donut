@@ -34,7 +34,7 @@ def main():
     obs_dim = ckpt["obs_dim"]
     action_nvec = ckpt["action_nvec"]
 
-    model = ActorCritic(obs_dim, action_nvec, hidden_dim=256)
+    model = ActorCritic(obs_dim, action_nvec, hidden_dim=256, cont_dim=ckpt.get("cont_dim", 1))
     model.load_state_dict(ckpt["model_state"])
     policy = LearnedPolicy(model, name="checkpoint_eval")
 

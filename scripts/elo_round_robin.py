@@ -33,7 +33,9 @@ def main():
 
     for ckpt_path in ckpt_files:
         ckpt = torch.load(ckpt_path, map_location="cpu")
-        model = ActorCritic(ckpt["obs_dim"], ckpt["action_nvec"], hidden_dim=256)
+        model = ActorCritic(
+            ckpt["obs_dim"], ckpt["action_nvec"], hidden_dim=256, cont_dim=ckpt.get("cont_dim", 1)
+        )
         model.load_state_dict(ckpt["model_state"])
         policy = LearnedPolicy(model, name=ckpt_path.stem)
         policies.append(policy)

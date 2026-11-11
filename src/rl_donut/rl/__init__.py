@@ -19,7 +19,8 @@ from rl_donut.rl.pool import OpponentPool, PoolMember
 from rl_donut.rl.ppo import LearnedPolicy, PPOConfig, PPOTrainer, compute_gae
 from rl_donut.rl.rewards import RewardWeights, anneal_alpha, compute_reward
 from rl_donut.rl.runner import RolloutMetrics, Runner
-from rl_donut.rl.stand_in import Events, Policy, PolicyContext, StandInEnv, StepResult
+from rl_donut.env.policy import Policy, PolicyContext
+from rl_donut.rl.stand_in import Events, StandInEnv, StepResult
 from rl_donut.rl.styles import CombatStyle, StyleRewardConfig, compute_styled_reward
 from rl_donut.rl.watchlist import WatchlistReport, WatchlistThresholds, WatchlistTracker
 

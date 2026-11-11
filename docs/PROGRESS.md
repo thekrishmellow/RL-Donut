@@ -7,8 +7,8 @@ learning environment. Agents with jetpacks and rifles fight on cave maps that ar
 from a seed, learn by playing, and are later tested on maps they have never seen.
 
 The plan has twelve phases. The environment side is complete, including the scripted
-opponents, replays and a viewer. The learning side has been built in parallel against an
-earlier draft of the interface and is ready to be connected.
+opponents, replays and a viewer. The learning code now runs on that environment. Training
+has not been repeated there, so there are no learning results yet.
 
 ## How the work is done
 
@@ -241,26 +241,23 @@ In parallel, the learning half has been written through to self-play:
 - styled opponents (aggressive, defensive, sniper) and tests on maps and physics the agent
   was not trained on.
 
-This was built against the first draft of the interface, from before aim became continuous
-and before the real observations existed. It is a working pipeline, and its numbers are not
-yet results. After the opponent and replay work, it will be moved onto the real environment
-and re-run.
+That code now steps the real environment: discrete move, jetpack and shoot, plus a
+continuous aim angle, and the 330-number observation. The numbers in the learning guide
+were measured on the earlier stand-in. They become results only after a training run here.
 
 ## Tests and write-up
 
-449 automated tests pass, covering map generation, physics, combat, the learning interface,
-and the standard wrapper. Guides describe the map generator, the engine, the learning
-interface, and the handoff between the two halves, including the list of changes the
-learning code needs.
+490 automated tests pass: 456 on the environment and 34 on the learning code. Guides
+describe the map generator, the engine, the learning interface, and the handoff between
+the two halves.
 
 ## What is left
 
 | Remaining work | Why it matters |
 |---|---|
-| Connect the learning code to this environment and re-run it | The first real training results. The learning branch was written against an earlier interface |
-| Later phases | Adaptive opponents, a full generalization study, a dashboard, and the written report |
+| First training run on the real environment | Turns the learning pipeline into a result: whether PPO can beat a stationary target, then a turret |
+| Review the curriculum order | Over 16 matches the stationary turret beat the chasing rusher, so the planned gate order is worth checking once a learner exists |
+| Later phases | A full generalization study, a dashboard, and the written report |
 
-The route planner is cached per map. The learning code's move onto the real interface is a
-real piece of work, not a rename. Over 16 matches the stationary turret beat the chasing
-rusher more often than the other way round, so the planned order of those two gates is
-worth checking once a learner exists.
+The route planner is cached per map. The learning code now uses the real observations and
+the continuous aim. The next measurement is a training run.

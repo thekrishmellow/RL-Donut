@@ -36,6 +36,7 @@ class CheckpointManager:
             "update": update,
             "obs_dim": model.obs_dim,
             "action_nvec": model.action_nvec,
+            "cont_dim": model.cont_dim,
             "extra_meta": extra_meta or {},
         }
         if optimizer is not None:

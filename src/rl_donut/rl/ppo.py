@@ -11,8 +11,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from rl_donut.env.policy import PolicyContext
 from rl_donut.rl.model import ActorCritic
-from rl_donut.rl.stand_in import Policy, PolicyContext
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,9 @@ def compute_gae(
             nextnonterminal = 1.0 - next_done.astype(np.float32)
             nextvalues = next_value
         else:
-            nextnonterminal = 1.0 - dones[t + 1].astype(np.float32)
+            # The done flag belongs to the transition that produced it, so a match
+            # ending at t cuts the advantage chain at t.
+            nextnonterminal = 1.0 - dones[t].astype(np.float32)
             nextvalues = values[t + 1]
 
         delta = rewards[t] + gamma * nextvalues * nextnonterminal - values[t]
@@ -69,11 +71,15 @@ class LearnedPolicy:
         self.model.to(self.device)
         self.model.eval()
 
-    def act(self, obs: np.ndarray, ctx: PolicyContext | None = None) -> np.ndarray:
+    def act(self, obs: np.ndarray, ctx: PolicyContext | None = None):
         with torch.no_grad():
-            obs_tensor = torch.from_numpy(obs).float().to(self.device)
-            actions, _, _, _ = self.model.get_action_and_value(obs_tensor)
-            return actions.cpu().numpy()
+            obs_tensor = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(self.device)
+            out = self.model.get_action_and_value(obs_tensor)
+        if self.model.cont_dim:
+            discrete, continuous, _, _, _ = out
+            return discrete.cpu().numpy().astype(np.int64), continuous.cpu().numpy().astype(np.float32)
+        actions, _, _, _ = out
+        return actions.cpu().numpy()
 
 
 class PPOTrainer:
@@ -98,6 +104,7 @@ class PPOTrainer:
         returns: np.ndarray,      # (steps, n_envs)
         advantages: np.ndarray,   # (steps, n_envs)
         values: np.ndarray,       # (steps, n_envs)
+        continuous: np.ndarray | None = None,  # (steps, n_envs, cont_dim)
     ) -> dict[str, float]:
         """Perform PPO mini-batch updates over the collected rollout buffer."""
         self.model.train()
@@ -105,6 +112,11 @@ class PPOTrainer:
         # Flatten rollout dimensions
         b_obs = torch.from_numpy(obs.reshape(-1, self.model.obs_dim)).float().to(self.device)
         b_actions = torch.from_numpy(actions.reshape(-1, len(self.model.action_nvec))).long().to(self.device)
+        b_cont = None
+        if self.model.cont_dim:
+            if continuous is None:
+                raise ValueError("continuous actions are required when the model has an aim head")
+            b_cont = torch.from_numpy(continuous.reshape(-1, self.model.cont_dim)).float().to(self.device)
         b_log_probs = torch.from_numpy(log_probs.reshape(-1)).float().to(self.device)
         b_returns = torch.from_numpy(returns.reshape(-1)).float().to(self.device)
         b_advantages = torch.from_numpy(advantages.reshape(-1)).float().to(self.device)
@@ -130,9 +142,14 @@ class PPOTrainer:
                 if self.cfg.normalize_advantages and len(mb_advantages) > 1:
                     mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
-                _, new_log_prob, entropy, new_value = self.model.get_action_and_value(
-                    b_obs[mb_idx], b_actions[mb_idx]
-                )
+                if b_cont is None:
+                    _, new_log_prob, entropy, new_value = self.model.get_action_and_value(
+                        b_obs[mb_idx], b_actions[mb_idx]
+                    )
+                else:
+                    _, _, new_log_prob, entropy, new_value = self.model.get_action_and_value(
+                        b_obs[mb_idx], b_actions[mb_idx], b_cont[mb_idx]
+                    )
                 log_ratio = new_log_prob - b_log_probs[mb_idx]
                 ratio = log_ratio.exp()
 
@@ -198,6 +215,7 @@ class PPOTrainer:
             "optimizer_state": self.optimizer.state_dict(),
             "obs_dim": self.model.obs_dim,
             "action_nvec": self.model.action_nvec,
+            "cont_dim": self.model.cont_dim,
             "extra_meta": extra_meta or {},
         }
         torch.save(ckpt, p)
