@@ -589,8 +589,8 @@ Decide 1v1, 2v2 or both for the rest of the project, based on 6.4 and 6.5 result
 | Aim action design | Team A (Phase 3) | done: continuous angle (I1) | — |
 | `get_state()` contents | Team A | done (I13) | — |
 | Real `MatchEnv` | Team A | done (Phase 3 step 4) | — |
-| Scripted bots (turret, rusher) | Team A | end of Phase 4 | Team B's random and static-target bots |
-| Replay writer | Team A | end of Phase 4 | none needed for training |
+| Scripted bots (turret, rusher) | Team A | done: `rl_donut.env.TurretBot`, `RusherBot` (B2) | Team B's random and static-target bots |
+| Replay writer | Team A | done: `rl_donut.env.replay` (B3) | none needed for training |
 | Episode stats (4.4) | Team A | done | — |
 | Reward function, kill credit for falls (G4) | Team B | step 5.3 | — |
 | PyTorch pin | Team B | step 5.1 | — |

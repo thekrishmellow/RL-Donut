@@ -68,13 +68,13 @@ Guide: [`docs/interface.md`](docs/interface.md).
 Guide: [`docs/bots.md`](docs/bots.md).
 
 1. Policy interface, match harness, random and static-target bots — done
-2. Bot perception helpers
-3. Turret bot
-4. Rusher bot
-5. Bot ladder and difficulty calibration
-6. Replay format, writer and reader
-7. Renderer
-8. Merge preparation with Team B
+2. Bot perception: own sight for shooting, true position for chasing — done
+3. Turret bot — done
+4. Rusher bot, routes cached per map — done
+5. Bot ladder — done
+6. Action replays (`.json.gz`) — done
+7. Matplotlib replay viewer — done
+8. Merge notes for Team B — done
 
 ## Decisions
 
@@ -183,6 +183,8 @@ Guide: [`docs/bots.md`](docs/bots.md).
 | I18 | Env speed and batching | `scripts/bench_env.py` (full step, per-part shares, `--state`, `--processes`), no timing test; no speed-up now; one process, 256 matches per batch in 1v1 and 128 in 2v2 | Measured 35,000 (1v1) and 20,400 (2v2) match steps/s at 256 matches; visibility is 45% of it. The env costs about as much as a PPO update per sample, so doubling it gains at most 1.5×. If Phase 5 shows the env is the bottleneck: corner rays only when the centre is hidden, then numba, then more processes (2 nearly double the rate) |
 | I19 | PettingZoo wrapper | `RLDonutParallelEnv` (`ParallelEnv`, one match) in `rl_donut.env.pettingzoo_env`; `pettingzoo==1.27.0`, `gymnasium==1.4.0` pinned, imported only there; Dict action space (MultiDiscrete + aim Box); pluggable `reward_fn`, default kills − deaths as a placeholder; truncated at the timer, never terminated; `state()` = team A's `get_state` | Named in the brief, for outside tools; passes PettingZoo's own API and seed tests. One match runs about 700 steps/s against 35,000 batched, so training stays on `MatchEnv`. Rewards belong to Phase 5, so the default is only a placeholder |
 | B1 | Policy interface | `Policy.act(obs, ctx) -> (discrete, continuous)` and `PolicyContext(env, slots, rng)` in `rl_donut.env.policy`; stateful bots notice new matches through `world.episode` (no reset method); `play_matches(env, team_a, team_b)` plays one match per slot, sides swapped by the caller; `RandomBot` and `StaticTargetBot` in `rl_donut.env.bots` | One home both teams import, in the shape Team B already uses; no protocol change for Team B's callers. Team B's `evaluate_policy` stays the official evaluation, so the harness stays small. Random bots draw 100% of 1v1 matches, so beating one means getting kills |
+| B2 | Bot perception and the two yardstick bots | `look` uses the agent's own five-point sight and fires only inside 30 tiles; chasing uses the true nearest living enemy; aim error 2°; turret reaction 2 decisions, rusher 1; `TurretBot` never moves; `RusherBot` flies the generator's routes, cached per map seed | Bots are a yardstick. The route planner costs 112 ms per map, so it is cached. Over 16 full matches the rusher kills a static target every time (4.88 kills) and loses the duel to the turret more often than it wins (0.38 to 0.12) |
+| B3 | Replays and viewer | A `.json.gz` of the map seed, env seed and every decision's actions; `scripts/render_replay.py` redraws it with matplotlib | The engine is deterministic, so positions need not be stored. Matplotlib was already the project choice; a replay of turret versus rusher shows the rusher crossing the map |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
 
 ## Seed splits

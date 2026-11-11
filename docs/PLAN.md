@@ -65,7 +65,7 @@ tooling, `M` map generator; later phases add their own letters).
 | 1 | Seeded procedural map generator | 2 | done (steps 1–9) |
 | 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | done (steps 1–8) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | done (steps 1–8) |
-| 4 | Scripted bots, renderer, replay files | — | in progress (step 1 of 8) |
+| 4 | Scripted bots, renderer, replay files | — | done (steps 1–8) |
 | 5 | Rewards, single-agent PPO against bots | 4, 5 | planned |
 | 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | planned |
 | 7 | Adaptive opponents, style policies | 9 | planned |
@@ -215,15 +215,14 @@ Still open:
   and 20,400 in 2v2 at 256 matches in one process. No speed-up until Phase 5 shows the env
   is the bottleneck.
 
-### Phase 4 — Bots, renderer, replays (in progress, [`bots.md`](bots.md))
+### Phase 4 — Bots, renderer, replays (done, [`bots.md`](bots.md))
 
 - **Policy interface (approved, B1):** `rl_donut.env.policy` (`Policy`, `PolicyContext`,
-  `play_matches`); random and static-target bots in `rl_donut.env.bots`.
-
-- Scripted bots: random, static target, turret (aims and shoots from cover), rusher
-  (chases and shoots). These are the fixed yardstick that self-play Elo can't inflate.
-- Renderer reads engine state; replays are saved per match and drive both the dashboard
-  and debugging.
+  `play_matches`); random, static, turret and rusher bots in `rl_donut.env.bots`.
+- **Perception and yardsticks (approved, B2):** bots shoot only what they can see; the
+  rusher chases the true enemy position using cached route plans.
+- **Replays and viewer (approved, B3):** `.json.gz` action logs, redrawn by
+  `scripts/render_replay.py`.
 
 ### Phase 5 — Rewards and PPO (draft)
 
@@ -290,7 +289,7 @@ Still open:
 | Charts and previews | matplotlib 3.11, scripts only | approved (E2) | Never imported by library code |
 | Deep learning | PyTorch | draft (Phase 5) | Named in the brief; alternative JAX is faster on accelerators but adds friction on a Mac |
 | Multi-agent API | PettingZoo 1.27 `ParallelEnv` + Gymnasium 1.4 spaces, for outside tools | approved (I19) | Named in the brief; standard multi-agent interface. Training uses the batched `MatchEnv` |
-| Rendering | Pygame or matplotlib-based | open (Phase 4) | Only for viewing; the engine stays headless |
+| Rendering | matplotlib, scripts only (`render_replay.py`) | approved (B3) | Only for viewing; the engine stays headless. Pygame was the alternative and was not needed |
 | Experiment tracking | Local `metrics.jsonl`; optionally Weights & Biases or TensorBoard | open (Phase 5) | Local files keep the dashboard offline-capable |
 | Dashboard | Streamlit suggested | open (Phase 9) | Fastest to build; alternative FastAPI + a web front end is more flexible but slower to build |
 

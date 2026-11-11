@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) complete: action space, visibility, observations, the batched `MatchEnv`, the shared contract test, gravity/thrust randomization, the speed benchmark and a PettingZoo wrapper. Phase 4 (bots, replays, renderer) in progress: the policy interface and simple bots done.
+**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) complete: action space, visibility, observations, the batched `MatchEnv`, the shared contract test, gravity/thrust randomization, the speed benchmark and a PettingZoo wrapper. Phase 4 (bots, replays, renderer) complete: turret and rusher bots, action replays, and a matplotlib viewer.
 
 ## Documentation
 
@@ -15,6 +15,7 @@ self-play, and are evaluated on maps they have never seen.
 | [`docs/mapgen.md`](docs/mapgen.md) | How the map generator works, step by step, with code and the reasoning behind it |
 | [`docs/engine.md`](docs/engine.md) | How the game engine works, step by step, and the promises it keeps to the map generator |
 | [`docs/interface.md`](docs/interface.md) | The RL interface: actions, observations, the batched environment, with the measurements behind each choice |
+| [`docs/PROGRESS.md`](docs/PROGRESS.md) | Progress report: what is finished, how it was built, and what is left |
 | [`docs/bots.md`](docs/bots.md) | Phase 4: the policy interface, scripted bots, replays and the renderer |
 | [`docs/handoff_phase5_6.md`](docs/handoff_phase5_6.md) | For the teammate building Phases 5–6: what exists, the interface contract, every step and decision, the merge checklist |
 
@@ -43,6 +44,8 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/route_check.py                        # route bot flies 2,000 generator routes; failures -> outputs/route_failures.png
 .venv/bin/python scripts/preview_rifle.py --count 3            # fans of rifle shots on real maps -> outputs/rifle_preview.png
 .venv/bin/python scripts/view_match.py --team-size 2 --close   # watch a match: outputs/match.gif and a filmstrip outputs/match.png
+.venv/bin/python scripts/bot_ladder.py                         # bot versus bot, sides swapped
+.venv/bin/python scripts/render_replay.py                      # record turret vs rusher and draw it -> outputs/replay.gif
 .venv/bin/python scripts/bench_engine.py                       # engine speed by batch size, split by component
 .venv/bin/python scripts/aim_ceiling.py                        # best possible hit rate of each aim design on real maps
 .venv/bin/python scripts/preview_visibility.py                 # what one agent sees of enemies at every spot -> outputs/visibility_preview.png
@@ -78,7 +81,9 @@ RL-Donut/
 │   │   ├── match_env.py       MatchEnv: the batched RL environment (auto-reset, episode stats, critic state)
 │   │   ├── pettingzoo_env.py  PettingZoo ParallelEnv over one match, for outside tools
 │   │   ├── policy.py          Policy interface shared by learners and bots; play_matches harness
-│   │   ├── bots.py            Scripted bots
+│   │   ├── bots.py            Scripted bots: random, static, turret, rusher
+│   │   ├── perception.py      What a bot can see, and how it aims
+│   │   ├── replay.py          Action replays: record, save, play back
 │   │   ├── config.py          EngineConfig and its parts: physics, rifle, life, match settings
 │   │   ├── state.py           World: per-agent arrays (matches, agents), spawns, reset
 │   │   ├── collision.py       Hitbox vs tile grid, one axis at a time; standing detection
