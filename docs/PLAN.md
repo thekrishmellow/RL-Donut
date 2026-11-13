@@ -11,6 +11,7 @@ open. It is a living document; update it whenever a phase lands or a plan change
 | [`docs/mapgen.md`](mapgen.md) | Deep dive into the map generator (Phase 1), step by step |
 | [`docs/engine.md`](engine.md) | Deep dive into the game engine (Phase 2), step by step |
 | [`docs/handoff_phase5_6.md`](handoff_phase5_6.md) | Guide for the teammate building Phases 5–6 in parallel: interface contract, steps, merge checklist |
+| [`docs/handoff_phase7_9.md`](handoff_phase7_9.md) | Guide for the teammate building Phases 7–9: what is already on main, the steps, and how to merge |
 | [`README.md`](../README.md) | Setup, everyday commands, repository layout |
 
 Status markers used below: **approved** (in `DESIGN.md`, may be built), **draft** (a
@@ -352,6 +353,11 @@ Status: the learning code is on `main` and steps `MatchEnv` at spec 0.3, with a 
 aim head and the Phase 4 bots. `docs/rl.md` still holds the decisions made on the stand-in.
 Those are a starting point. A training run on the real environment, and a review of those
 decisions, come before any of them is logged as approved.
+
+Phases 7–9 are the next parallel slice. The code for adaptive opponents, combat styles,
+and the generalization eval is already on `main`. The dashboard is not. The branch, the
+files to leave alone, and the merge checklist are in
+[`docs/handoff_phase7_9.md`](handoff_phase7_9.md).
 
 ---
 
