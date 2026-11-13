@@ -12,6 +12,7 @@ open. It is a living document; update it whenever a phase lands or a plan change
 | [`docs/engine.md`](engine.md) | Deep dive into the game engine (Phase 2), step by step |
 | [`docs/handoff_phase5_6.md`](handoff_phase5_6.md) | Guide for the teammate building Phases 5–6 in parallel: interface contract, steps, merge checklist |
 | [`docs/handoff_phase7_9.md`](handoff_phase7_9.md) | Guide for the teammate building Phases 7–9: what is already on main, the steps, and how to merge |
+| [`docs/plan_phase7_10.md`](plan_phase7_10.md) | Implementation plan from Phase 7 to the final report: context, gates, code, decisions, merging |
 | [`README.md`](../README.md) | Setup, everyday commands, repository layout |
 
 Status markers used below: **approved** (in `DESIGN.md`, may be built), **draft** (a
