@@ -186,6 +186,22 @@ Guide: [`docs/bots.md`](docs/bots.md).
 | B2 | Bot perception and the two yardstick bots | `look` uses the agent's own five-point sight and fires only inside 30 tiles; chasing uses the true nearest living enemy; aim error 2°; turret reaction 2 decisions, rusher 1; `TurretBot` never moves; `RusherBot` flies the generator's routes, cached per map seed | Bots are a yardstick. The route planner costs 112 ms per map, so it is cached. Over 16 full matches the rusher kills a static target every time (4.88 kills) and loses the duel to the turret more often than it wins (0.38 to 0.12) |
 | B3 | Replays and viewer | A `.json.gz` of the map seed, env seed and every decision's actions; `scripts/render_replay.py` redraws it with matplotlib | The engine is deterministic, so positions need not be stored. Matplotlib was already the project choice; a replay of turret versus rusher shows the rusher crossing the map |
 | M6 | Disconnected regions | Fill small pockets, carve tunnels to large regions, reject if main region < 60% of open space; always carve passages across the mirror seam | Keeps maps playable without discarding too many seeds |
+| K1 | Admission and Elo match duration | 60 s matches for pool admission and tournament ratings | About one kill per minute, so 10 s matches were almost entirely draws |
+| A1 | Best checkpoint tracking | Evaluate every 25 updates against RusherBot; save `ckpt_best.pt` on higher win rate or tied win rate with more damage | PPO performance peaked and degraded over time; downstream evaluations must use the empirical peak policy |
+| K2 | Final evaluation format | 1v1 default for all benchmark and evaluation milestones | Unshared multi-agent search makes 2v2 a stretch goal; 1v1 provides strict evaluation |
+| A2 | Adaptive matchmaking weights | 50% latest snapshot, 30% historical PFSP pool, 20% baseline bots, dynamically tilted by `difficulty_bias` | Regulates learner win rate while maintaining curriculum diversity |
+| A3 | Adaptive target band | Regulates learner win rate in the 50%–60% zone | Target zone ensures stable learning gradient without exploitation collapse |
+| A4 | Combat style specialization | Sniper style reward with additive bonus for hits landed at range ≥ 15 tiles | Directly rewards long-range marksmanship and elevation control |
+| A5 | Long-range hit measurement | Distance measured from shooter's end-of-step position to raycast hit point | Maximum positional discrepancy is ≤ 0.4 tiles, leaving environment core frozen |
+| X1 | Out-of-distribution generalization tiers | 5 tiers: train, val, unseen maps (seeds 30,000+), physics ×0.75, physics ×1.25 | Evaluates topological memorization vs dynamics adaptation independently |
+| X2 | Generalization opponent | Evaluate against `RusherBot` | Dynamic opponent forces active movement and combat encounters |
+| D1 | Dashboard technology | Streamlit pinned in `requirements.txt` | Fast local visualization without running a background web server |
+| D2 | Dashboard architecture | Reads filesystem (`runs/`) offline without live socket dependencies | Zero performance penalty on concurrent training loops |
+| K3 | Benchmark pairing protocol | 200 matches per pairing with exact 50/50 team swapping | Ensures narrow Wilson 95% confidence intervals (±7% at 50% win rate) |
+| K4 | Test split protection | Mandatory `--final` flag writes `runs/final/TEST_USED` containing commit hash and host metadata | Guarantees test split (seeds 20,000–20,999) is evaluated only once |
+| K5 | Statistical intervals | Wilson 95% score intervals for proportions; Newcombe hybrid score intervals for proportion differences | Statistically robust bounds avoiding asymptotic Gaussian approximation breakdown at p=0 or p=1 |
+| K6 | Bradley–Terry Elo solver | Hunter's Minorization-Maximization algorithm for maximum-likelihood estimation with 200 bootstrap iterations | Order-independent convergence with empirical rating confidence intervals |
+| K7 | Empirical reporting honesty | Document both official spawn 0-damage search limitation and close-spawn combat skills | Honest presentation of findings identifying navigation search as the primary open problem |
 
 ## Seed splits
 
