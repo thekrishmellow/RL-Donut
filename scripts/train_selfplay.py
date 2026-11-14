@@ -120,6 +120,7 @@ def main():
     metrics_file = run_dir / "metrics.jsonl"
     start_time = time.time()
     best_eval_win_rate = -1.0
+    best_eval_damage = -1.0
 
     for update in range(1, args.total_updates + 1):
         # Sample opponent (adaptive or PFSP standard)
@@ -193,8 +194,12 @@ def main():
                 f"  -> Eval @ update {update:3d} vs RusherBot: "
                 f"win_rate={eval_win_rate:.3f} (kills={eval_kills:.1f}, dmg={eval_damage:.1f})"
             )
-            if eval_rep.win_rate > best_eval_win_rate:
+            improved = (eval_rep.win_rate > best_eval_win_rate) or (
+                eval_rep.win_rate == best_eval_win_rate and eval_rep.mean_damage_dealt > best_eval_damage
+            )
+            if improved:
                 best_eval_win_rate = eval_rep.win_rate
+                best_eval_damage = eval_rep.mean_damage_dealt
                 best_payload = {
                     "model_state": model.state_dict(),
                     "update": update,
