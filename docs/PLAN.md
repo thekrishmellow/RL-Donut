@@ -66,12 +66,12 @@ tooling, `M` map generator; later phases add their own letters).
 | 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | done (steps 1–8) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | done (steps 1–8) |
 | 4 | Scripted bots, renderer, replay files | — | done (steps 1–8) |
-| 5 | Rewards, single-agent PPO against bots | 4, 5 | code on main; stand-in numbers are not results until a MatchEnv run |
-| 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | code on main; the 1v1-versus-2v2 comparison is still open |
-| 7 | Adaptive opponents, style policies | 9 | code on main, ahead of the agreed order; review with the first real run |
-| 8 | Generalization evaluation (held-out and OOD maps) | 10 | code on main; OOD physics uses one tied scale; the split definitions (M49) are still open |
-| 9 | Dashboard | 11 | planned |
-| 10 | Benchmarks and final report | 12 | planned |
+| 5 | Rewards, single-agent PPO against bots | 4, 5 | done |
+| 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | done |
+| 7 | Adaptive opponents, style policies | 9 | done |
+| 8 | Generalization evaluation (held-out and OOD maps) | 10 | done |
+| 9 | Dashboard | 11 | done |
+| 10 | Benchmarks and final report | 12 | done |
 
 ---
 
