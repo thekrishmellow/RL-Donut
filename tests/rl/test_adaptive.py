@@ -4,34 +4,28 @@ from rl_donut.rl.bots import StaticTargetBot
 from rl_donut.rl.pool import OpponentPool
 
 
-def test_adaptive_difficulty_increases_on_win_streak():
+def test_adaptive_twenty_wins_and_losses():
     pool = OpponentPool()
     pool._add_snapshot(StaticTargetBot("snap_1"), update=10)
-    matchmaker = AdaptiveMatchmaker(pool, AdaptiveConfig(target_win_rate_max=0.60))
+    matchmaker = AdaptiveMatchmaker(pool)
 
-    initial_bias = matchmaker.difficulty_bias
-
-    # Record 10 consecutive wins
-    for _ in range(10):
+    # Twenty wins raise difficulty bias
+    for _ in range(20):
         matchmaker.record_match_outcome(won=True, lost=False)
+    assert matchmaker.difficulty_bias > 0.0
 
-    assert matchmaker.current_win_rate == 1.0
-    assert matchmaker.difficulty_bias > initial_bias
+    # Twenty losses lower difficulty bias
+    matchmaker_loss = AdaptiveMatchmaker(pool)
+    for _ in range(20):
+        matchmaker_loss.record_match_outcome(won=False, lost=True)
+    assert matchmaker_loss.difficulty_bias < 0.0
 
-
-def test_adaptive_difficulty_decreases_on_loss_streak():
-    pool = OpponentPool()
-    pool._add_snapshot(StaticTargetBot("snap_1"), update=10)
-    matchmaker = AdaptiveMatchmaker(pool, AdaptiveConfig(target_win_rate_min=0.50))
-
-    initial_bias = matchmaker.difficulty_bias
-
-    # Record 10 consecutive losses
-    for _ in range(10):
-        matchmaker.record_match_outcome(won=False, lost=True)
-
-    assert matchmaker.current_win_rate == 0.0
-    assert matchmaker.difficulty_bias < initial_bias
+    # Twenty draws leave difficulty bias at 0.0 (win rate 0.5 is within 0.50 - 0.60)
+    matchmaker_draw = AdaptiveMatchmaker(pool)
+    for _ in range(20):
+        matchmaker_draw.record_match_outcome(won=False, lost=False)
+    assert matchmaker_draw.current_win_rate == 0.5
+    assert matchmaker_draw.difficulty_bias == 0.0
 
 
 def test_adaptive_opponent_selection():

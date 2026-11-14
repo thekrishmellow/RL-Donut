@@ -20,6 +20,7 @@ def parse_args():
     parser.add_argument("--n-matches", type=int, default=10, help="Matches per pair")
     parser.add_argument("--split", type=str, default="val", help="Evaluation split (val/test)")
     parser.add_argument("--seed", type=int, default=50_000, help="Tournament seed")
+    parser.add_argument("--seconds", type=float, default=60.0, help="Match duration in seconds")
     parser.add_argument("--out", type=str, default="", help="Output elo.json path")
     return parser.parse_args()
 
@@ -49,6 +50,7 @@ def main():
         n_matches_per_pair=args.n_matches,
         split=args.split,
         seed=args.seed,
+        match_seconds=args.seconds,
     )
 
     print("\n=== Final Elo Ratings ===")

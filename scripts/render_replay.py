@@ -26,11 +26,27 @@ from rl_donut.mapgen import load_split  # noqa: E402
 BOTS = {"random": RandomBot, "static": StaticTargetBot, "turret": TurretBot, "rusher": RusherBot}
 
 
+def load_checkpoint_policy(path: str | Path, name: str = "checkpoint"):
+    import torch
+    from rl_donut.rl.model import ActorCritic
+    from rl_donut.rl.ppo import LearnedPolicy
+
+    ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    obs_dim = ckpt.get("obs_dim", 76)
+    action_nvec = ckpt.get("action_nvec", [5, 2, 2])
+    cont_dim = ckpt.get("cont_dim", 1)
+    model = ActorCritic(obs_dim, action_nvec, hidden_dim=256, cont_dim=cont_dim)
+    model.load_state_dict(ckpt["model_state"])
+    return LearnedPolicy(model, name=name)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--replay", help="draw this file instead of playing a new match")
     parser.add_argument("--a", default="turret", choices=sorted(BOTS))
     parser.add_argument("--b", default="rusher", choices=sorted(BOTS))
+    parser.add_argument("--a-checkpoint", type=str, default=None, help="load a LearnedPolicy checkpoint for team A")
+    parser.add_argument("--b-checkpoint", type=str, default=None, help="load a LearnedPolicy checkpoint for team B")
     parser.add_argument("--seconds", type=float, default=15.0)
     parser.add_argument("--team-size", type=int, default=1)
     parser.add_argument("--map", type=int, default=0, help="index into the val split")
@@ -44,7 +60,9 @@ def main():
     else:
         cfg = EngineConfig(team_size=args.team_size, match=MatchConfig(duration=args.seconds))
         env = MatchEnv(1, args.team_size, seed=args.seed, cfg=cfg, maps=maps[args.map:args.map + 1])
-        replay = record(env, BOTS[args.a](), BOTS[args.b](), seed=args.seed)
+        policy_a = load_checkpoint_policy(args.a_checkpoint, "agent_a") if args.a_checkpoint else BOTS[args.a]()
+        policy_b = load_checkpoint_policy(args.b_checkpoint, "agent_b") if args.b_checkpoint else BOTS[args.b]()
+        replay = record(env, policy_a, policy_b, seed=args.seed)
         save(f"{args.out}.json.gz", replay)
     env, frames = snapshots(replay, maps)
     title = f"seed {replay['map_seed']}  {replay['score'][0]} : {replay['score'][1]}"

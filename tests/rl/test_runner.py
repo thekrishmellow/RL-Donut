@@ -1,3 +1,4 @@
+import numpy as np
 from rl_donut.env.config import EngineConfig, MatchConfig
 from rl_donut.env.match_env import MatchEnv
 from rl_donut.rl.bots import RandomBot, StaticTargetBot
@@ -36,4 +37,35 @@ def test_runner_executes_rollout_and_updates():
     metrics2 = runner.step_rollout()
     assert metrics2.loss_policy is not None
     assert runner.global_step == 32 * 2
+
+
+def test_runner_reward_fn_and_pop_outcomes():
+    env = MatchEnv(
+        2, team_size=1, split="val", seed=102,
+        cfg=EngineConfig(team_size=1, match=MatchConfig(duration=1.0)),
+    )
+    model = ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=32, cont_dim=env.action_cont_dim)
+    trainer = PPOTrainer(model, PPOConfig(n_epochs=2, n_minibatches=1))
+    opponent = StaticTargetBot()
+
+    def ones_reward(events, team, *, alpha, weights, env):
+        return np.ones(events.damage_dealt.shape, dtype=np.float32)
+
+    runner = Runner(
+        env=env,
+        learner=model,
+        opponent=opponent,
+        trainer=trainer,
+        n_steps=16,
+        reward_fn=ones_reward,
+        total_training_steps=1000,
+    )
+
+    runner.step_rollout()
+    outcomes = runner.pop_outcomes()
+    assert len(outcomes) == 2
+    for out in outcomes:
+        assert out in (-1, 0, 1)
+
+    assert runner.pop_outcomes() == []
 

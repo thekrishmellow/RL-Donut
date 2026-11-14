@@ -38,3 +38,29 @@ def test_pool_pruning_capacity():
     names = [s.name for s in pool.snapshots]
     assert names == ["snapshot_0030", "snapshot_0040", "snapshot_0050"]
 
+
+def test_pool_duplicate_name_raises():
+    pool = OpponentPool()
+    with pytest.raises(ValueError):
+        pool._add_snapshot(StaticTargetBot("bot_1"), update=10)
+        pool._add_snapshot(StaticTargetBot("bot_2"), update=10)
+
+
+def test_pool_pfsp_weight_lowers_on_wins():
+    pool = OpponentPool()
+    bot1 = StaticTargetBot("bot_1")
+    bot2 = StaticTargetBot("bot_2")
+    pool._add_snapshot(bot1, update=10)
+    pool._add_snapshot(bot2, update=20)
+
+    for _ in range(5):
+        pool.record_match_result("snapshot_0010", learner_won=True, learner_lost=False)
+
+    s1 = [s for s in pool.snapshots if s.name == "snapshot_0010"][0]
+    s2 = [s for s in pool.snapshots if s.name == "snapshot_0020"][0]
+    assert s1.learner_win_rate == 1.0
+    assert s2.learner_win_rate == 0.5
+    w1 = (1.0 - s1.learner_win_rate) ** 2
+    w2 = (1.0 - s2.learner_win_rate) ** 2
+    assert w1 < w2
+

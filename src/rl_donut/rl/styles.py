@@ -8,6 +8,8 @@ Defines specialized combat archetypes to prevent strategy cycling in self-play:
 
 from dataclasses import dataclass
 from enum import Enum
+import math
+from typing import Any
 import numpy as np
 
 from rl_donut.rl.rewards import RewardWeights
@@ -67,11 +69,45 @@ STYLE_CONFIGS: dict[CombatStyle, StyleRewardConfig] = {
 }
 
 
+def long_hits(events: Any, env: Any, min_range: float) -> np.ndarray:
+    """(M, A) count of this step's hits landed from at least `min_range` tiles.
+
+    Distance runs from the shooter's position after the step to shot.hit.
+    That can be off by up to 0.4 tiles from where the shot left, which is fine against
+    a 15-tile threshold. Matches ending on this step (events.done[m] == True) are skipped
+    because env.world already holds the next match's spawns.
+    """
+    M, A = events.damage_dealt.shape
+    counts = np.zeros((M, A), dtype=np.float32)
+    if not hasattr(events, "shot_log") or not events.shot_log or env is None:
+        return counts
+
+    w = getattr(env, "world", None)
+    if w is None:
+        return counts
+
+    for _, shot in events.shot_log:
+        if shot.target < 0 or shot.hit is None:
+            continue
+        m = shot.match
+        if events.done[m]:
+            continue
+        s = shot.shooter
+        sx, sy = w.x[m, s], w.y[m, s]
+        hx, hy = shot.hit
+        dist = math.hypot(hx - sx, hy - sy)
+        if dist >= min_range:
+            counts[m, s] += 1.0
+
+    return counts
+
+
 def compute_styled_reward(
     events: Events,
     team: np.ndarray,
     style: CombatStyle = CombatStyle.BALANCED,
     alpha: float = 1.0,
+    long_hit_counts: np.ndarray | None = None,
     hit_distances: np.ndarray | None = None,
 ) -> np.ndarray:
     """Compute per-agent reward tailored to a specific combat behavioral archetype."""
@@ -103,9 +139,23 @@ def compute_styled_reward(
         shaping += w.fall_penalty * events.fell.astype(np.float32)
 
     # 3. Sniper long-range bonus
-    if cfg.long_range_bonus > 0.0 and hit_distances is not None:
-        long_range_hits = (hit_distances >= cfg.min_sniper_range) & (events.hits > 0)
-        shaping += cfg.long_range_bonus * long_range_hits.astype(np.float32)
+    if cfg.long_range_bonus > 0.0:
+        if long_hit_counts is not None:
+            shaping += cfg.long_range_bonus * long_hit_counts.astype(np.float32)
+        elif hit_distances is not None:
+            long_range_hits = (hit_distances >= cfg.min_sniper_range) & (events.hits > 0)
+            shaping += cfg.long_range_bonus * long_range_hits.astype(np.float32)
 
     return (sparse + alpha * shaping).astype(np.float32)
+
+
+def styled_reward_fn(style: CombatStyle):
+    """Reward function adapter for Runner using a given combat style."""
+    cfg = STYLE_CONFIGS[style]
+
+    def reward(events, team, *, alpha, weights, env):
+        counts = long_hits(events, env, cfg.min_sniper_range) if cfg.long_range_bonus else None
+        return compute_styled_reward(events, team, style=style, alpha=alpha, long_hit_counts=counts)
+
+    return reward
 
