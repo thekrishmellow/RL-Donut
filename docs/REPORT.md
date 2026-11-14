@@ -178,3 +178,4 @@ All pairings evaluated over 20 matches of 60 seconds with strict 50/50 side swap
   - Elo Ratings: `runs/sp-adaptive/elo.json`
   - Generalization Report: `runs/sp-adaptive/generalization.json`
   - Generation Replay: `outputs/gen1_vs_genN.gif`
+
