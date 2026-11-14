@@ -8,6 +8,7 @@ import argparse
 from pathlib import Path
 import torch
 
+from rl_donut.rl.benchmark import guard_test_split
 from rl_donut.rl.bots import RandomBot, StaticTargetBot
 from rl_donut.rl.elo import run_round_robin
 from rl_donut.rl.model import ActorCritic
@@ -18,15 +19,19 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run offline Elo round-robin tournament.")
     parser.add_argument("--run-dir", type=str, required=True, help="Directory containing ckpt_*.pt files")
     parser.add_argument("--n-matches", type=int, default=10, help="Matches per pair")
-    parser.add_argument("--split", type=str, default="val", help="Evaluation split (val/test)")
+    parser.add_argument("--split", type=str, default="val", choices=["val", "test"], help="Evaluation split (val/test)")
     parser.add_argument("--seed", type=int, default=50_000, help="Tournament seed")
     parser.add_argument("--seconds", type=float, default=60.0, help="Match duration in seconds")
+    parser.add_argument("--final", action="store_true", help="Required flag when evaluating on test split")
+    parser.add_argument("--force", action="store_true", help="Force re-evaluation on test split")
     parser.add_argument("--out", type=str, default="", help="Output elo.json path")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    guard_test_split(args.split, final=args.final, force=args.force)
+
     run_dir = Path(args.run_dir)
     ckpt_files = sorted(run_dir.glob("ckpt_*.pt"))
 
