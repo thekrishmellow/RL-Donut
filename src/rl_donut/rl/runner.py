@@ -1,6 +1,7 @@
 """Rollout runner and training loop coordinating learner and opponents."""
 
 from dataclasses import dataclass
+from typing import Callable
 import numpy as np
 import torch
 
@@ -9,6 +10,13 @@ from rl_donut.env.policy import Policy, PolicyContext
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.ppo import PPOTrainer, compute_gae
 from rl_donut.rl.rewards import RewardWeights, anneal_alpha, compute_reward
+
+
+RewardFn = Callable[..., np.ndarray]
+
+
+def default_reward(events, team, *, alpha, weights, env):
+    return compute_reward(events, team, alpha=alpha, weights=weights)
 
 
 @dataclass
@@ -37,6 +45,7 @@ class Runner:
         n_steps: int = 128,
         weights: RewardWeights | None = None,
         total_training_steps: int = 100_000,
+        reward_fn: RewardFn | None = None,
         device: torch.device | None = None,
     ):
         if learner.cont_dim != env.action_cont_dim:
@@ -48,7 +57,9 @@ class Runner:
         self.n_steps = n_steps
         self.weights = weights or RewardWeights()
         self.total_training_steps = total_training_steps
+        self.reward_fn = reward_fn or default_reward
         self.device = device or torch.device("cpu")
+        self.completed_outcomes: list[int] = []
 
         self.global_step = 0
         self.rng = np.random.default_rng(getattr(env, "seed", env.world.rng_seed))
@@ -77,6 +88,10 @@ class Runner:
         self.episode_lengths = np.zeros(self.n_learner_envs, dtype=np.int32)
         self.completed_returns: list[float] = []
         self.completed_lengths: list[int] = []
+
+    def pop_outcomes(self) -> list[int]:
+        out, self.completed_outcomes = self.completed_outcomes, []
+        return out
 
     def _extract_slots(self, arr: np.ndarray, slots: np.ndarray) -> np.ndarray:
         return arr[slots[:, 0], slots[:, 1]]
@@ -133,7 +148,7 @@ class Runner:
 
             res = self.env.step(full_discrete, full_cont)
 
-            full_rewards = compute_reward(res.events, self.env.team, alpha=alpha, weights=self.weights)
+            full_rewards = self.reward_fn(res.events, self.env.team, alpha=alpha, weights=self.weights, env=self.env)
             l_rewards = self._extract_slots(full_rewards, self.learner_slots)
             l_dones = res.done[self.learner_slots[:, 0]]
 
@@ -161,6 +176,8 @@ class Runner:
                     self.completed_lengths.append(int(self.episode_lengths[idx]))
                     self.episode_returns[idx] = 0.0
                     self.episode_lengths[idx] = 0
+                    m, a = self.learner_slots[idx]
+                    self.completed_outcomes.append(int(res.events.outcome[m, self.env.team[a]]))
 
             cur_obs = res.obs
 

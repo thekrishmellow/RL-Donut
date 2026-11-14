@@ -1,10 +1,12 @@
 from pathlib import Path
 import pytest
+from rl_donut.rl.bots import RandomBot, StaticTargetBot
 from rl_donut.rl.elo import (
     MatchResult,
     compute_elo_ratings,
     compute_expected_score,
     EloReport,
+    run_round_robin,
 )
 
 
@@ -37,4 +39,12 @@ def test_elo_report_json(tmp_path: Path):
     json_path = tmp_path / "elo.json"
     report.to_json(json_path)
     assert json_path.exists()
+
+
+def test_run_round_robin_match_seconds():
+    policies = [RandomBot(), StaticTargetBot()]
+    report = run_round_robin(policies, n_matches_per_pair=2, match_seconds=1.0)
+    assert len(report.matches) == 1
+    assert "random_bot" in report.ratings
+    assert "static_target_bot" in report.ratings
 

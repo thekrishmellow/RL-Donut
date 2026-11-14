@@ -55,6 +55,9 @@ class OpponentPool:
         # Add permanent benchmark bots
         bots = permanent_bots if permanent_bots is not None else [StaticTargetBot(), RandomBot()]
         for bot in bots:
+            for m in self.members:
+                if m.name == bot.name:
+                    raise ValueError(f"Duplicate bot name in pool: {bot.name}")
             self.members.append(
                 PoolMember(name=bot.name, policy=bot, update=0, is_permanent=True)
             )
@@ -79,6 +82,7 @@ class OpponentPool:
         n_eval_matches: int = 16,
         split: str = "val",
         seed: int = 30_000,
+        match_seconds: float = 60.0,
     ) -> bool:
         """Evaluate candidate against the latest snapshot. Adds to pool if win rate >= threshold."""
         latest = self.latest_snapshot
@@ -93,7 +97,7 @@ class OpponentPool:
             n_matches=n_eval_matches,
             split=split,
             seed=seed,
-            match_duration_seconds=10.0,
+            match_duration_seconds=match_seconds,
         )
 
         if report.win_rate >= self.admission_win_rate:
@@ -103,6 +107,9 @@ class OpponentPool:
 
     def _add_snapshot(self, policy: Policy, update: int) -> None:
         member = PoolMember(name=f"snapshot_{update:04d}", policy=policy, update=update)
+        for m in self.members:
+            if m.name == member.name:
+                raise ValueError(f"Duplicate member name in pool: {member.name}")
         self.members.append(member)
 
         # Prune oldest snapshot if exceeding max_snapshots

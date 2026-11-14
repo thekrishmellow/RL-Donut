@@ -11,7 +11,15 @@ from rl_donut.rl.generalization import (
     compute_generalization_gap,
     evaluate_generalization,
     get_ood_engine_configs,
+    get_physics_shifts,
 )
+
+
+def test_get_physics_shifts():
+    shifts = get_physics_shifts()
+    assert set(shifts.keys()) == {"physics_0.75", "physics_1.25"}
+    assert shifts["physics_0.75"].physics.scale_range == (0.75, 0.75)
+    assert shifts["physics_1.25"].physics.scale_range == (1.25, 1.25)
 
 
 def test_get_ood_engine_configs():
@@ -37,6 +45,8 @@ def test_build_ood_maps():
 
 
 def test_compute_generalization_gap():
+    assert compute_generalization_gap(0.8, 0.5) == 0.3
+
     gap = compute_generalization_gap(train_win_rate=0.80, eval_win_rate=0.65)
     assert gap == pytest.approx(0.15, abs=1e-4)
 
@@ -60,9 +70,11 @@ def test_evaluate_generalization_smoke(tmp_path: Path):
     assert isinstance(report, GeneralizationReport)
     assert "train" in report.conditions
     assert "val" in report.conditions
-    assert "gravity_low" in report.conditions
-    assert "gravity_high" in report.conditions
-    assert "ood_seeds_30k" in report.conditions
+    assert "physics_0.75" in report.conditions
+    assert "physics_1.25" in report.conditions
+    assert "unseen" in report.conditions
+    assert isinstance(report.gap_unseen_ci, tuple)
+    assert len(report.gap_unseen_ci) == 2
 
     out_file = tmp_path / "gen_report.json"
     report.save(out_file)

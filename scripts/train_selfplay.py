@@ -14,15 +14,17 @@ import time
 import numpy as np
 import torch
 
+from rl_donut.env.bots import RusherBot
 from rl_donut.rl.adaptive import AdaptiveConfig, AdaptiveMatchmaker
 from rl_donut.rl.checkpoints import CheckpointManager
 from rl_donut.rl.elo import run_round_robin
+from rl_donut.rl.evaluate import evaluate_policy
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.pool import OpponentPool
 from rl_donut.rl.ppo import LearnedPolicy, PPOConfig, PPOTrainer
 from rl_donut.rl.runner import Runner
 from rl_donut.env.match_env import SPEC_VERSION, MatchEnv
-from rl_donut.rl.styles import CombatStyle, STYLE_CONFIGS
+from rl_donut.rl.styles import CombatStyle, STYLE_CONFIGS, styled_reward_fn
 from rl_donut.rl.watchlist import WatchlistTracker
 
 
@@ -35,6 +37,7 @@ def parse_args():
     parser.add_argument("--n-steps", type=int, default=128, help="Rollout steps per update")
     parser.add_argument("--total-updates", type=int, default=50, help="Total updates")
     parser.add_argument("--snapshot-interval", type=int, default=25, help="Snapshot evaluation interval")
+    parser.add_argument("--eval-every", type=int, default=25, help="Best checkpoint evaluation interval against RusherBot")
     parser.add_argument("--style", type=str, default="balanced", choices=["balanced", "aggressive", "defensive", "sniper"], help="Combat behavioral style")
     parser.add_argument("--adaptive", action="store_true", help="Enable adaptive matchmaking (maintains 50-60%% win rate)")
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
@@ -79,6 +82,7 @@ def main():
     
     style = CombatStyle(args.style)
     style_cfg = STYLE_CONFIGS[style]
+    reward_fn = styled_reward_fn(style) if style == CombatStyle.SNIPER else None
     matchmaker = AdaptiveMatchmaker(pool) if args.adaptive else None
     current_opponent = matchmaker.select_opponent() if matchmaker else pool.sample_opponent()
 
@@ -90,6 +94,7 @@ def main():
         n_steps=args.n_steps,
         weights=style_cfg.weights,
         total_training_steps=total_decision_steps,
+        reward_fn=reward_fn,
         device=device,
     )
 
@@ -104,6 +109,7 @@ def main():
         "n_steps": args.n_steps,
         "total_updates": args.total_updates,
         "snapshot_interval": args.snapshot_interval,
+        "eval_every": args.eval_every,
         "style": args.style,
         "adaptive": args.adaptive,
         "created_at": datetime.now().isoformat(),
@@ -113,6 +119,7 @@ def main():
 
     metrics_file = run_dir / "metrics.jsonl"
     start_time = time.time()
+    best_eval_win_rate = -1.0
 
     for update in range(1, args.total_updates + 1):
         # Sample opponent (adaptive or PFSP standard)
@@ -126,10 +133,21 @@ def main():
         wall_time = time.time() - start_time
         env_steps = runner.global_step
 
-        if matchmaker is not None:
-            won = m.mean_return > 0.0
-            lost = m.mean_return < 0.0
-            matchmaker.record_match_outcome(won=won, lost=lost)
+        wins = 0
+        losses = 0
+        draws = 0
+        for outcome in runner.pop_outcomes():
+            won = outcome > 0
+            lost = outcome < 0
+            if won:
+                wins += 1
+            elif lost:
+                losses += 1
+            else:
+                draws += 1
+            if matchmaker is not None:
+                matchmaker.record_match_outcome(won=won, lost=lost)
+            pool.record_match_result(opponent.name, learner_won=won, learner_lost=lost)
 
         record = {
             "update": update,
@@ -145,7 +163,53 @@ def main():
             "mean_return": round(m.mean_return, 3),
             "mean_length": round(m.mean_length, 1),
             "pool_size": len(pool.snapshots),
+            "wins": wins,
+            "losses": losses,
+            "draws": draws,
+            "difficulty_bias": round(matchmaker.difficulty_bias, 3) if matchmaker is not None else None,
         }
+
+        # Periodic evaluation against RusherBot and best checkpoint tracking (Section 4.2)
+        if args.eval_every > 0 and update % args.eval_every == 0:
+            eval_model = ActorCritic(env.obs_dim, env.action_nvec, hidden_dim=256, cont_dim=env.action_cont_dim)
+            eval_model.load_state_dict(model.state_dict())
+            eval_policy = LearnedPolicy(eval_model, name=f"eval_{update:04d}", device=device)
+            eval_rep = evaluate_policy(
+                learner=eval_policy,
+                opponent=RusherBot(),
+                n_matches=16,
+                split="val",
+                team_size=args.team_size,
+                seed=80_000,
+                match_duration_seconds=60.0,
+            )
+            eval_win_rate = round(eval_rep.win_rate, 4)
+            eval_kills = round(eval_rep.mean_kills, 2)
+            eval_damage = round(eval_rep.mean_damage_dealt, 2)
+            record["eval_win_rate"] = eval_win_rate
+            record["eval_kills"] = eval_kills
+            record["eval_damage"] = eval_damage
+            print(
+                f"  -> Eval @ update {update:3d} vs RusherBot: "
+                f"win_rate={eval_win_rate:.3f} (kills={eval_kills:.1f}, dmg={eval_damage:.1f})"
+            )
+            if eval_rep.win_rate > best_eval_win_rate:
+                best_eval_win_rate = eval_rep.win_rate
+                best_payload = {
+                    "model_state": model.state_dict(),
+                    "update": update,
+                    "obs_dim": model.obs_dim,
+                    "action_nvec": model.action_nvec,
+                    "cont_dim": model.cont_dim,
+                    "extra_meta": {
+                        "update": update,
+                        "eval_win_rate": eval_win_rate,
+                        "eval_kills": eval_kills,
+                        "eval_damage": eval_damage,
+                    },
+                }
+                torch.save(best_payload, run_dir / "ckpt_best.pt")
+                print(f"  -> Saved new best checkpoint to {run_dir / 'ckpt_best.pt'} (win_rate: {eval_win_rate:.3f})")
 
         with open(metrics_file, "a") as f:
             f.write(json.dumps(record) + "\n")

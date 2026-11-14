@@ -105,6 +105,7 @@ def run_round_robin(
     seed: int = 50_000,
     anchor_name: str = ANCHOR_BOT_NAME,
     anchor_rating: float = ANCHOR_RATING,
+    match_seconds: float = 60.0,
 ) -> EloReport:
     """Execute pairwise round-robin tournament with half-split side swapping."""
     n = len(policies)
@@ -120,7 +121,7 @@ def run_round_robin(
                 n_matches=n_matches_per_pair,
                 split=split,
                 seed=seed + i * 100 + j,
-                match_duration_seconds=10.0,
+                match_duration_seconds=match_seconds,
             )
             matches.append(
                 MatchResult(

@@ -13,6 +13,7 @@ Computes headline Generalization Gaps:
 
 from dataclasses import asdict, dataclass
 import json
+import math
 from pathlib import Path
 from typing import Any
 import numpy as np
@@ -30,6 +31,11 @@ class GeneralizationReport:
     train_win_rate: float
     val_win_rate: float
     generalization_gap_val: float
+    unseen_win_rate: float
+    gap_unseen: float
+    gap_unseen_ci: tuple[float, float]
+    physics_win_rates: dict[str, float]
+    gap_physics: float
     mean_ood_win_rate: float
     generalization_gap_ood: float
     conditions: dict[str, dict[str, Any]]
@@ -44,8 +50,28 @@ class GeneralizationReport:
             json.dump(self.to_dict(), f, indent=2)
 
 
+def difference_interval(
+    p1: float, ci1: tuple[float, float], p2: float, ci2: tuple[float, float]
+) -> tuple[float, float]:
+    """Newcombe's hybrid score interval for the difference of two independent proportions."""
+    l1, u1 = ci1
+    l2, u2 = ci2
+    d = p1 - p2
+    lower = d - math.sqrt((p1 - l1) ** 2 + (u2 - p2) ** 2)
+    upper = d + math.sqrt((u1 - p1) ** 2 + (p2 - l2) ** 2)
+    return float(np.round(lower, 4)), float(np.round(upper, 4))
+
+
+def get_physics_shifts() -> dict[str, EngineConfig]:
+    """Tied gravity and thrust scales: 0.75x and 1.25x. Gravity and thrust move together."""
+    return {
+        "physics_0.75": EngineConfig(physics=PhysicsConfig(scale_range=(0.75, 0.75))),
+        "physics_1.25": EngineConfig(physics=PhysicsConfig(scale_range=(1.25, 1.25))),
+    }
+
+
 def get_ood_engine_configs() -> dict[str, EngineConfig]:
-    """Tied gravity and thrust scales. Independent shifts drop level flight below the map's ledges."""
+    """Backward-compatible view with old four-name keys."""
     return {
         "gravity_low": EngineConfig(physics=PhysicsConfig(scale_range=(0.75, 0.75))),
         "gravity_high": EngineConfig(physics=PhysicsConfig(scale_range=(1.25, 1.25))),
@@ -73,7 +99,7 @@ def evaluate_generalization(
     include_ood_maps: bool = True,
     match_duration_seconds: float = 60.0,
 ) -> GeneralizationReport:
-    """Comprehensive generalization benchmark evaluating learner against an opponent."""
+    """Comprehensive generalization benchmark evaluating learner against an opponent across 5 tiers."""
     conditions_results: dict[str, dict[str, Any]] = {}
 
     # 1. In-distribution train split
@@ -98,42 +124,58 @@ def evaluate_generalization(
     )
     conditions_results["val"] = asdict(rep_val)
 
-    ood_win_rates: list[float] = []
-
-    # 3. Tied physics scale, low and high. Gravity and thrust move together.
+    # 3. Tied physics scale, low and high. Seed offsets +200, +300.
+    physics_win_rates: dict[str, float] = {}
+    shift_configs = get_physics_shifts()
     if include_physics_shifts:
-        for name, cfg in get_ood_engine_configs().items():
+        offsets = {"physics_0.75": 200, "physics_1.25": 300}
+        for name, cfg in shift_configs.items():
             rep_shift = evaluate_policy(
                 learner=learner,
                 opponent=opponent,
                 n_matches=n_matches_per_condition,
                 split="val",
-                seed=seed + 200,
+                seed=seed + offsets[name],
                 cfg=cfg,
                 match_duration_seconds=match_duration_seconds,
             )
             conditions_results[name] = asdict(rep_shift)
-            ood_win_rates.append(rep_shift.win_rate)
+            physics_win_rates[name] = rep_shift.win_rate
 
-    # 4. Out-of-Distribution seed maps (30,000+)
+    # 4. Out-of-Distribution seed maps (30,000+). Seed offset +400.
+    unseen_win_rate = rep_val.win_rate
+    ci_unseen = (rep_val.wilson_ci_lower, rep_val.wilson_ci_upper)
     if include_ood_maps:
-        ood_maps = build_ood_maps(start_seed=30_000, count=max(8, n_matches_per_condition // 2))
-        rep_ood_maps = evaluate_policy(
+        ood_maps = build_ood_maps(start_seed=30_000, count=max(n_matches_per_condition, 8))
+        rep_unseen = evaluate_policy(
             learner=learner,
             opponent=opponent,
             n_matches=n_matches_per_condition,
-            seed=seed + 300,
+            seed=seed + 400,
             custom_maps=ood_maps,
             match_duration_seconds=match_duration_seconds,
         )
-        conditions_results["ood_seeds_30k"] = asdict(rep_ood_maps)
-        ood_win_rates.append(rep_ood_maps.win_rate)
+        conditions_results["unseen"] = asdict(rep_unseen)
+        unseen_win_rate = rep_unseen.win_rate
+        ci_unseen = (rep_unseen.wilson_ci_lower, rep_unseen.wilson_ci_upper)
 
     train_wr = rep_train.win_rate
     val_wr = rep_val.win_rate
-    mean_ood_wr = float(np.mean(ood_win_rates)) if ood_win_rates else val_wr
 
     gap_val = compute_generalization_gap(train_wr, val_wr)
+    gap_unseen = compute_generalization_gap(train_wr, unseen_win_rate)
+    gap_unseen_ci = difference_interval(
+        train_wr,
+        (rep_train.wilson_ci_lower, rep_train.wilson_ci_upper),
+        unseen_win_rate,
+        ci_unseen,
+    )
+
+    phys_mean = float(np.mean(list(physics_win_rates.values()))) if physics_win_rates else val_wr
+    gap_physics = compute_generalization_gap(train_wr, phys_mean)
+
+    ood_pool = list(physics_win_rates.values()) + ([unseen_win_rate] if include_ood_maps else [])
+    mean_ood_wr = float(np.mean(ood_pool)) if ood_pool else val_wr
     gap_ood = compute_generalization_gap(train_wr, mean_ood_wr)
 
     return GeneralizationReport(
@@ -142,6 +184,11 @@ def evaluate_generalization(
         train_win_rate=train_wr,
         val_win_rate=val_wr,
         generalization_gap_val=gap_val,
+        unseen_win_rate=unseen_win_rate,
+        gap_unseen=gap_unseen,
+        gap_unseen_ci=gap_unseen_ci,
+        physics_win_rates=physics_win_rates,
+        gap_physics=gap_physics,
         mean_ood_win_rate=mean_ood_wr,
         generalization_gap_ood=gap_ood,
         conditions=conditions_results,
