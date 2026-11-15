@@ -1,6 +1,12 @@
 # RL-Donut: Final Project Report
 ## Self-Evolving Multi-Agent RL in Procedural Cave Arenas
 
+**Current status, 15 November 2026.** This report is an earlier sign-off. It is not the
+result of `runs/spawn-curriculum-14`. That run won 8 of 16 validation matches at 6–12 tiles
+with the enemy in sight, then 4 of 16 at 12–16 tiles, and did not train the official hidden
+spawns. Read `docs/PROGRESS.md` for the measurements to use. The sections below are kept as
+the sign-off that was merged, including its own test-split table of 0 wins.
+
 **Author:** RL-Donut Team  
 **Evaluation Git Commit:** `ab90687ba4ded329aff18de9e5f13a66049e424c`  
 **Execution Environment:** Windows AMD64 (`torch==2.14.1+cpu`, `numpy==2.5.4`, `streamlit==1.67.0`, `pytest==9.2.0`)  

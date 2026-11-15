@@ -1,14 +1,15 @@
 # RL-Donut — progress report
 
-10 November 2026
+15 November 2026
 
 RL-Donut is a two-person project: a Mini Militia-style 2D game built as a reinforcement
 learning environment. Agents with jetpacks and rifles fight on cave maps that are generated
 from a seed, learn by playing, and are later tested on maps they have never seen.
 
 The plan has twelve phases. The environment side is complete, including the scripted
-opponents, replays and a viewer. The learning code now runs on that environment. Training
-has not been repeated there, so there are no learning results yet.
+opponents, replays and a viewer. The learning code is on `main` and steps that environment.
+Training has started and is not finished. The latest measured run is below. `docs/REPORT.md`
+is an earlier sign-off and does not replace these numbers.
 
 ## How the work is done
 
@@ -243,21 +244,47 @@ In parallel, the learning half has been written through to self-play:
 
 That code now steps the real environment: discrete move, jetpack and shoot, plus a
 continuous aim angle, and the 330-number observation. The numbers in the learning guide
-were measured on the earlier stand-in. They become results only after a training run here.
+were measured on the earlier stand-in.
+
+## Training so far
+
+`runs/spawn-curriculum-14` trains PPO against a static bot and widens the gap between
+spawns after the policy wins at least half of 16 validation matches of 60 seconds. Both
+rungs that were actually trained keep the enemy in sight and inside the 30-tile rifle range.
+
+| Rung | Best validation result | What happened next |
+|---|---|---|
+| 6–12 tiles, enemy in sight | 8 of 16 wins at update 175, 1.81 kills, 273 damage | The 50% gate opened. Checkpoint: `ckpt_tiles_8.pt` |
+| 12–16 tiles, still in sight | 4 of 16 wins, about 0.6 kills and 120 damage | Later checks fell to 1 of 16. The gate stayed shut |
+| 16–28 tiles, beyond rifle range, and the official hidden spawns | Not run | The ladder stopped on the 12–16 tile rung |
+
+A separate check of those two checkpoints, same seed and match length, found that the
+12–16 tile weights do not beat the 6–12 tile weights on the longer maps (3 of 16 wins and
+about 90 damage, against 3 of 16 and about 80 damage). Both checkpoints aimed with a spread
+of about 59 degrees. A standing body at 14 tiles is about 7 degrees tall.
+
+After that run, the aim spread was capped at 6 degrees and the entropy bonus stopped
+paying the policy to widen it. When no enemy is seen or remembered, the learner roams the
+map's floors instead of standing still, and the learned aim returns as soon as an enemy is
+in the observation. Those two changes are not inside the checkpoints above. A new network
+with the 4-degree aim, before any training, scored about one kill every 30 seconds when the
+enemy started in view. On four official maps the roam covered 22–39 tiles in 60 seconds and
+did not see the static enemy.
 
 ## Tests and write-up
 
-490 automated tests pass: 456 on the environment and 34 on the learning code. Guides
-describe the map generator, the engine, the learning interface, and the handoff between
-the two halves.
+525 tests are collected. Guides describe the map generator, the engine, the learning
+interface, and the handoff between the two halves. `docs/REPORT.md` records an earlier
+sign-off, including a test-split table of 0 wins. Use this file for the current result.
 
 ## What is left
 
 | Remaining work | Why it matters |
 |---|---|
-| First training run on the real environment | Turns the learning pipeline into a result: whether PPO can beat a stationary target, then a turret |
-| Review the curriculum order | Over 16 matches the stationary turret beat the chasing rusher, so the planned gate order is worth checking once a learner exists |
-| Later phases | A full generalization study, a dashboard, and the written report |
+| Retrain with the 6-degree aim cap | The saved checkpoints were trained while the spread stayed near 59 degrees |
+| A rung the policy can actually clear between 8 tiles and 16 tiles | The 12–16 tile rung peaked at 4 of 16 and then declined |
+| Search from the official spawns | The teams start hidden. Roaming the floors did not produce a sighting in the four maps that were checked |
+| Self-play, generalization, and a report that matches these measurements | The code for those phases is on `main`. The numbers in `docs/REPORT.md` are the earlier sign-off |
 
-The route planner is cached per map. The learning code now uses the real observations and
-the continuous aim. The next measurement is a training run.
+The route planner is cached per map. The next measurement is a training run that starts
+from the capped aim, on the 6–12 tile rung, and stops when the validation wins stop rising.

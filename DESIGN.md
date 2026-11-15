@@ -22,6 +22,9 @@ later phases, infrastructure, open decisions) is in [`docs/PLAN.md`](docs/PLAN.m
 | 9 | Dashboard | 11 |
 | 10 | Benchmarks & report | 12 |
 
+Phases 1–4 below are done, step by step. Phases 5–10 have code on `main` and are not
+logged here as approved or finished. The training measurements are in `docs/PROGRESS.md`.
+
 ### Phase 1 steps
 
 1. Seed system — done

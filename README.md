@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phase 1 (procedural map generator) complete. Phase 2 (game engine) complete. Phase 3 (RL interface) complete: action space, visibility, observations, the batched `MatchEnv`, the shared contract test, gravity/thrust randomization, the speed benchmark and a PettingZoo wrapper. Phase 4 (bots, replays, renderer) complete: turret and rusher bots, action replays, and a matplotlib viewer. Phases 5–8 (PPO, self-play, styles, generalization) are on `main` and step `MatchEnv`; their stand-in numbers are not results until a training run on this environment.
+**Status:** Phases 1–4 are complete: maps, engine, the 330-number observation, bots, replays, and the viewer. The learning code for Phases 5–10 is on `main` and steps `MatchEnv`. Training is not finished. The latest run, `runs/spawn-curriculum-14`, won 8 of 16 validation matches when the enemy started 6–12 tiles away and in sight, then 4 of 16 at 12–16 tiles. It never reached the official spawns, which hide the teams from each other. `docs/REPORT.md` is an earlier sign-off and is not that result. The current measurements are in `docs/PROGRESS.md`.
 
 ## Documentation
 
@@ -15,9 +15,11 @@ self-play, and are evaluated on maps they have never seen.
 | [`docs/mapgen.md`](docs/mapgen.md) | How the map generator works, step by step, with code and the reasoning behind it |
 | [`docs/engine.md`](docs/engine.md) | How the game engine works, step by step, and the promises it keeps to the map generator |
 | [`docs/interface.md`](docs/interface.md) | The RL interface: actions, observations, the batched environment, with the measurements behind each choice |
-| [`docs/PROGRESS.md`](docs/PROGRESS.md) | Progress report: what is finished, how it was built, and what is left |
+| [`docs/PROGRESS.md`](docs/PROGRESS.md) | Progress report: what is finished, the training measurements, and what is left |
+| [`docs/REPORT.md`](docs/REPORT.md) | Earlier sign-off. Read `docs/PROGRESS.md` for the current result |
 | [`docs/bots.md`](docs/bots.md) | Phase 4: the policy interface, scripted bots, replays and the renderer |
 | [`docs/handoff_phase5_6.md`](docs/handoff_phase5_6.md) | For the teammate building Phases 5–6: what exists, the interface contract, every step and decision, the merge checklist |
+| [`docs/plan_phase7_10.md`](docs/plan_phase7_10.md) | Implementation notes from Phase 7 through the report |
 
 ## Setup
 
@@ -53,6 +55,8 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/preview_observation.py                # one observation drawn -> outputs/observation_preview.png
 .venv/bin/python scripts/bench_env.py --state                  # full MatchEnv.step speed by batch size, split by part
 .venv/bin/python scripts/bench_env.py --processes 1 2 4 8 --batches 256   # several env processes at once
+.venv/bin/python scripts/train_spawn_curriculum.py --updates 400       # PPO vs a static bot; widens the spawn gap after a 50% win rate
+.venv/bin/python -m streamlit run scripts/dashboard.py                 # training logs and pictures; refreshes every 3 seconds
 ```
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
@@ -124,8 +128,9 @@ RL-Donut/
 │   └── preview_noise.py
 ├── tests/                     One test file per module, including golden-value tests
 ├── map_cache/                 Resumable build chunks (git-ignored)
-└── outputs/                   Generated images and logs (git-ignored)
+├── outputs/                   Pictures and replays. A snapshot is committed; new files stay git-ignored
+└── runs/                      Training logs. `spawn-curriculum-14` is committed; other runs stay git-ignored
 ```
 
-Later phases will add the remaining bots, the renderer and replays to `src/rl_donut/env/`, plus
-`src/rl_donut/rl/` (PPO and self-play), `src/rl_donut/eval/` and `dashboard/`.
+`src/rl_donut/rl/` holds PPO, rewards, the spawn-distance curriculum, the map roam used when no
+enemy is in view, and the dashboard loaders. The dashboard script is `scripts/dashboard.py`.

@@ -11,6 +11,8 @@ open. It is a living document; update it whenever a phase lands or a plan change
 | [`docs/mapgen.md`](mapgen.md) | Deep dive into the map generator (Phase 1), step by step |
 | [`docs/engine.md`](engine.md) | Deep dive into the game engine (Phase 2), step by step |
 | [`docs/handoff_phase5_6.md`](handoff_phase5_6.md) | Guide for the teammate building Phases 5–6 in parallel: interface contract, steps, merge checklist |
+| [`docs/PROGRESS.md`](PROGRESS.md) | What is finished, the training measurements, and what is left |
+| [`docs/REPORT.md`](REPORT.md) | Earlier sign-off. The current result is in `PROGRESS.md` |
 | [`README.md`](../README.md) | Setup, everyday commands, repository layout |
 
 Status markers used below: **approved** (in `DESIGN.md`, may be built), **draft** (a
@@ -66,12 +68,18 @@ tooling, `M` map generator; later phases add their own letters).
 | 2 | Game engine: physics, jetpack, rifle, regen, respawns | 1 | done (steps 1–8) |
 | 3 | RL interface: observations, actions, PettingZoo wrapper, speed benchmark | 3 | done (steps 1–8) |
 | 4 | Scripted bots, renderer, replay files | — | done (steps 1–8) |
-| 5 | Rewards, single-agent PPO against bots | 4, 5 | done |
-| 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | done |
-| 7 | Adaptive opponents, style policies | 9 | done |
-| 8 | Generalization evaluation (held-out and OOD maps) | 10 | done |
-| 9 | Dashboard | 11 | done |
-| 10 | Benchmarks and final report | 12 | done |
+| 5 | Rewards, single-agent PPO against bots | 4, 5 | code on main; spawn-distance training partial |
+| 6 | Self-play, opponent pool, Elo, 1v1 then 2v2 | 6, 7, 8 | code on main; no official-spawn result |
+| 7 | Adaptive opponents, style policies | 9 | code on main; no official-spawn result |
+| 8 | Generalization evaluation (held-out and OOD maps) | 10 | code on main; no official-spawn result |
+| 9 | Dashboard | 11 | code on main; reads `runs/` |
+| 10 | Benchmarks and final report | 12 | earlier draft in `docs/REPORT.md`; current numbers are in `docs/PROGRESS.md` |
+
+Phases 5–10 are not approved as finished. The code is on `main`. The latest training run is
+`runs/spawn-curriculum-14`: 8 of 16 wins at 6–12 tiles with the enemy in sight, then 4 of 16
+at 12–16 tiles. The official spawns, which hide the teams, were not trained. Aim is now capped
+at 6 degrees and a hidden agent roams the map's floors; those two changes came after that run,
+so the checkpoints do not include them.
 
 ---
 
@@ -348,10 +356,10 @@ renderer, replays); Team B builds Phases 5–6 (rewards, PPO, self-play) on bran
 interface between them, the step list and the merge checklist are in
 [`docs/handoff_phase5_6.md`](handoff_phase5_6.md).
 
-Status: the learning code is on `main` and steps `MatchEnv` at spec 0.3, with a Gaussian
-aim head and the Phase 4 bots. `docs/rl.md` still holds the decisions made on the stand-in.
-Those are a starting point. A training run on the real environment, and a review of those
-decisions, come before any of them is logged as approved.
+Status: the learning code is on `main` and steps `MatchEnv` at spec 0.3. A spawn-distance
+run has been measured (`runs/spawn-curriculum-14`). Phases 5–10 are still not logged as
+approved in `DESIGN.md`. `docs/rl.md` holds decisions made on the stand-in; those stay a
+starting point until they are reviewed against the real environment.
 
 ---
 
