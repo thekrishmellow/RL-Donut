@@ -6,6 +6,11 @@ self-play, and are evaluated on maps they have never seen.
 
 **Status:** Phases 1–4 are complete: maps, engine, the 330-number observation, bots, replays, and the viewer. The learning code for Phases 5–10 is on `main` and steps `MatchEnv`. Training is not finished. The latest run, `runs/spawn-curriculum-14`, won 8 of 16 validation matches when the enemy started 6–12 tiles away and in sight, then 4 of 16 at 12–16 tiles. It never reached the official spawns, which hide the teams from each other. `docs/REPORT.md` is an earlier sign-off and is not that result. The current measurements are in `docs/PROGRESS.md`.
 
+**For evaluators**
+
+- [Submission notes](https://github.com/thekrishmellow/RL-Donut/blob/main/docs/SUBMISSION.md)
+- [Technical report (PDF)](https://github.com/thekrishmellow/RL-Donut/raw/main/docs/RL-Donut-technical-report.pdf)
+
 ## Documentation
 
 | Document | What it covers |
