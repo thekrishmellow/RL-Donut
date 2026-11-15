@@ -10,6 +10,7 @@ self-play, and are evaluated on maps they have never seen.
 
 | Document | What it covers |
 |---|---|
+| [`docs/SUBMISSION.md`](docs/SUBMISSION.md) | Notes for evaluators: highlights, setup, which result to grade, and what is still open |
 | [`docs/PLAN.md`](docs/PLAN.md) | The whole project: roadmap, architecture, technical design per phase, infrastructure, risks, open decisions |
 | [`DESIGN.md`](DESIGN.md) | Project phases and the decision log (every choice, with its reason) |
 | [`docs/mapgen.md`](docs/mapgen.md) | How the map generator works, step by step, with code and the reasoning behind it |

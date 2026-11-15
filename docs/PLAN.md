@@ -11,6 +11,7 @@ open. It is a living document; update it whenever a phase lands or a plan change
 | [`docs/mapgen.md`](mapgen.md) | Deep dive into the map generator (Phase 1), step by step |
 | [`docs/engine.md`](engine.md) | Deep dive into the game engine (Phase 2), step by step |
 | [`docs/handoff_phase5_6.md`](handoff_phase5_6.md) | Guide for the teammate building Phases 5–6 in parallel: interface contract, steps, merge checklist |
+| [`docs/SUBMISSION.md`](SUBMISSION.md) | Notes for evaluators: setup, which result to grade, and what is still open |
 | [`docs/PROGRESS.md`](PROGRESS.md) | What is finished, the training measurements, and what is left |
 | [`docs/REPORT.md`](REPORT.md) | Earlier sign-off. The current result is in `PROGRESS.md` |
 | [`README.md`](../README.md) | Setup, everyday commands, repository layout |
