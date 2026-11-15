@@ -10,6 +10,7 @@ self-play, and are evaluated on maps they have never seen.
 
 - [Submission notes](https://github.com/thekrishmellow/RL-Donut/blob/main/docs/SUBMISSION.md)
 - [Technical report (PDF)](https://github.com/thekrishmellow/RL-Donut/raw/main/docs/RL-Donut-technical-report.pdf)
+- [Project video](https://drive.google.com/file/d/1QNjxs0l5xYY2trPUynf7zUQ7hziUaumm/view?usp=sharing)
 
 ## Documentation
 
