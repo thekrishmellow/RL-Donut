@@ -4,9 +4,11 @@ Usage:
     .venv/bin/python -m streamlit run scripts/dashboard.py
 
 Reads offline run logs from runs/<run_id>/ and replay outputs from outputs/.
-Does not import PyTorch, training loops, or game environments.
+Refreshes every few seconds, so a training run or a newly written preview shows up
+without a restart. Does not import PyTorch, training loops, or game environments.
 """
 
+from datetime import datetime, timedelta
 from pathlib import Path
 import pandas as pd
 import streamlit as st
@@ -14,7 +16,7 @@ import streamlit as st
 from rl_donut.runs import list_runs, load_config, load_json, load_metrics
 
 
-st.set_page_config(page_title="RL-Donut Dashboard", page_icon="🍩", layout="wide")
+st.set_page_config(page_title="RL-Donut", layout="wide")
 
 
 @st.cache_data
@@ -27,23 +29,31 @@ def get_cached_config(run_dir_str: str, mtime: float):
     return load_config(Path(run_dir_str))
 
 
-st.title("🍩 RL-Donut Dashboard")
+def _finite(value, default=0.0):
+    try:
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return default
+        return value
+    except TypeError:
+        return default
 
-runs_root = Path("runs")
-runs = list_runs(runs_root)
 
-if not runs:
-    st.info(
-        "No training runs found in `runs/`.\n\n"
-        "Start a training run with:\n"
-        "```bash\n"
-        ".venv/bin/python scripts/train.py --run-id demo --total-updates 10\n"
-        "```"
-    )
-else:
-    st.sidebar.header("Run Selection")
+def draw_runs():
+    runs_root = Path("runs")
+    runs = list_runs(runs_root)
+    if not runs:
+        st.info(
+            "No training runs found in `runs/`.\n\n"
+            "Start one with:\n"
+            "```bash\n"
+            ".venv/bin/python scripts/train_spawn_curriculum.py --updates 50\n"
+            "```"
+        )
+        return
+
+    st.sidebar.header("Run")
     run_names = [r.name for r in runs]
-    selected_run_name = st.sidebar.selectbox("Select Run", run_names)
+    selected_run_name = st.sidebar.selectbox("Select run", run_names)
     selected_run_dir = runs_root / selected_run_name
 
     metrics_file = selected_run_dir / "metrics.jsonl"
@@ -53,132 +63,139 @@ else:
 
     config = get_cached_config(str(selected_run_dir), cfg_mtime)
     metrics = get_cached_metrics(str(selected_run_dir), mtime)
+    curriculum = load_json(selected_run_dir, "curriculum.json")
+    clone = load_json(selected_run_dir, "clone.json")
 
-    # 1. Configuration Overview
-    with st.expander("⚙️ Run Configuration", expanded=False):
-        if config:
-            cfg_df = pd.DataFrame(list(config.items()), columns=["Parameter", "Value"])
-            st.dataframe(cfg_df, use_container_width=True, hide_index=True)
+    st.subheader(selected_run_name)
+    if mtime:
+        st.caption(f"Log updated {datetime.fromtimestamp(mtime):%Y-%m-%d %H:%M:%S}")
+
+    with st.expander("Run configuration", expanded=False):
+        shown = dict(config)
+        if curriculum:
+            shown["curriculum"] = curriculum
+        if clone:
+            shown["clone"] = {k: clone[k] for k in ("observation", "best_epoch", "best_val_log_prob", "eval") if k in clone}
+        if shown:
+            st.json(shown)
         else:
-            st.caption("No `config.json` found in run folder.")
+            st.caption("No config.json, curriculum.json, or clone.json in this run.")
 
-    # 2. Training Metrics
-    st.subheader(f"📈 Training Progress: {selected_run_name}")
-    if metrics:
-        df = pd.DataFrame(metrics)
-        if "update" in df.columns:
-            df.set_index("update", inplace=True)
+    if not metrics:
+        st.warning("`metrics.jsonl` is empty or has no valid rows yet.")
+        return
 
-        # Overview Key Stats
-        latest = df.iloc[-1]
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Total Updates", int(df.index[-1]))
-        col2.metric("Env Steps", int(latest.get("env_steps", 0)))
-        col3.metric("Mean Return", f"{latest.get('mean_return', 0.0):.2f}")
-        col4.metric("Entropy", f"{latest.get('entropy', 0.0):.3f}")
-        col5.metric("Policy Loss", f"{latest.get('loss_policy', 0.0):.3f}")
+    df = pd.DataFrame(metrics)
+    if "update" in df.columns:
+        df = df.set_index("update")
+    latest = df.iloc[-1]
 
-        # Training Curves & Stats Tabs
-        tab_perf, tab_loss, tab_selfplay, tab_eval = st.tabs(
-            ["Performance", "Losses & Optimization", "Self-Play Stats", "Evaluation"]
+    columns = st.columns(5)
+    columns[0].metric("Updates", int(df.index[-1]) if "update" in metrics[0] or df.index.name == "update" else len(df))
+    if "rung" in df.columns and pd.notna(latest.get("rung")):
+        columns[1].metric("Rung", str(latest["rung"]))
+    elif "env_steps" in df.columns:
+        columns[1].metric("Env steps", int(_finite(latest.get("env_steps"))))
+    else:
+        columns[1].metric("Rows", len(df))
+    columns[2].metric("Mean return", f"{_finite(latest.get('mean_return')):.2f}")
+    columns[3].metric("Entropy", f"{_finite(latest.get('entropy')):.3f}")
+    if "eval_win_rate" in df.columns and df["eval_win_rate"].notna().any():
+        best = df["eval_win_rate"].max()
+        columns[4].metric("Best val win rate", f"{best:.0%}")
+    else:
+        columns[4].metric("Policy loss", f"{_finite(latest.get('loss_policy')):.3f}")
+
+    if curriculum:
+        st.caption(
+            f"Curriculum stopped on `{curriculum.get('final_rung', '?')}` "
+            f"after {curriculum.get('updates', '?')} updates. "
+            f"Gate {float(curriculum.get('gate', 0)):.0%}."
         )
 
-        with tab_perf:
-            perf_cols = [c for c in ["mean_return", "mean_length", "alpha"] if c in df.columns]
-            if perf_cols:
-                st.line_chart(df[perf_cols])
+    tab_perf, tab_loss, tab_eval, tab_other = st.tabs(
+        ["Training", "Losses", "Validation checks", "Other reports"]
+    )
 
-        with tab_loss:
-            loss_cols = [c for c in ["loss_policy", "loss_value", "entropy", "approx_kl", "explained_variance"] if c in df.columns]
-            if loss_cols:
-                st.line_chart(df[loss_cols])
+    with tab_perf:
+        perf_cols = [c for c in ["mean_return", "mean_length", "alpha", "entropy"] if c in df.columns]
+        if perf_cols:
+            st.line_chart(df[perf_cols])
+        if "rung" in df.columns:
+            st.caption("Rung on each logged update: " + " → ".join(dict.fromkeys(df["rung"].dropna().astype(str))))
 
-        with tab_selfplay:
-            sp_cols = [c for c in ["pool_size", "difficulty_bias", "wins", "losses", "draws"] if c in df.columns]
-            if sp_cols:
-                st.line_chart(df[sp_cols])
-            if "opponent" in df.columns:
-                st.caption("Matches per Opponent:")
-                st.bar_chart(df["opponent"].value_counts())
-            elif not sp_cols:
-                st.caption("No self-play metrics recorded for this run.")
+    with tab_loss:
+        loss_cols = [c for c in ["loss_policy", "loss_value", "approx_kl", "explained_variance", "clip_fraction"] if c in df.columns]
+        if loss_cols:
+            st.line_chart(df[loss_cols])
+        else:
+            st.caption("This run did not log optimizer losses.")
 
-        with tab_eval:
-            eval_cols = [c for c in ["eval_win_rate", "eval_kills", "eval_damage"] if c in df.columns]
-            has_eval = False
-            if eval_cols:
-                eval_df = df[eval_cols].dropna(how="all")
-                if not eval_df.empty:
-                    has_eval = True
-                    st.line_chart(eval_df)
-                    if "eval_win_rate" in eval_df.columns:
-                        wr_series = eval_df["eval_win_rate"].dropna()
-                        if not wr_series.empty:
-                            best_upd = wr_series.idxmax()
-                            st.success(f"Best Evaluation Win Rate: **{wr_series.loc[best_upd]:.1%}** at update **{best_upd}**")
-            if not has_eval:
-                st.caption("No evaluation metrics (`eval_win_rate`) recorded for this run.")
-    else:
-        st.warning("`metrics.jsonl` is empty or has no valid rows yet.")
+    with tab_eval:
+        eval_cols = [c for c in ["rung", "eval_wins", "eval_matches", "eval_win_rate", "eval_kills", "eval_damage"] if c in df.columns]
+        if "eval_win_rate" in df.columns:
+            eval_df = df[eval_cols].dropna(subset=["eval_win_rate"])
+            if not eval_df.empty:
+                best_upd = eval_df["eval_win_rate"].idxmax()
+                st.success(
+                    f"Best validation win rate {eval_df.loc[best_upd, 'eval_win_rate']:.0%} "
+                    f"at update {best_upd}"
+                    + (f" on {eval_df.loc[best_upd, 'rung']}" if "rung" in eval_df.columns else "")
+                )
+                st.dataframe(eval_df.reset_index(), hide_index=True)
+                st.line_chart(eval_df[[c for c in ["eval_win_rate", "eval_kills", "eval_damage"] if c in eval_df.columns]])
+            else:
+                st.caption("No validation rows yet. They appear every eval interval.")
+        else:
+            st.caption("This run has no `eval_win_rate` column.")
 
-    # 3. Generalization Evaluation
-    gen_data = load_json(selected_run_dir, "generalization.json")
-    if gen_data:
-        st.subheader("🌐 Generalization Benchmark")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Train Win Rate", f"{gen_data.get('train_win_rate', 0.0):.1%}")
-        c2.metric("Val Win Rate", f"{gen_data.get('val_win_rate', 0.0):.1%}")
-        c3.metric("Val Gap (Δ_val)", f"{gen_data.get('generalization_gap_val', 0.0):+.4f}")
-        c4.metric("OOD Gap (Δ_ood)", f"{gen_data.get('generalization_gap_ood', 0.0):+.4f}")
+    with tab_other:
+        gen_data = load_json(selected_run_dir, "generalization.json")
+        if gen_data and "conditions" in gen_data:
+            st.markdown("**Generalization**")
+            st.dataframe(pd.DataFrame(gen_data["conditions"]).T)
+        elo_data = load_json(selected_run_dir, "elo.json")
+        if elo_data and "ratings" in elo_data:
+            st.markdown("**Elo**")
+            ratings = pd.DataFrame(list(elo_data["ratings"].items()), columns=["Participant", "Elo"])
+            st.dataframe(ratings.sort_values("Elo", ascending=False), hide_index=True)
+        bench = load_json(selected_run_dir, "benchmark.json")
+        if bench:
+            st.markdown("**Benchmark**")
+            st.json(bench)
+        if not gen_data and not (elo_data and "ratings" in elo_data) and not bench:
+            st.caption("No generalization, Elo, or benchmark file in this run.")
 
-        # Tier breakdown table
-        if "conditions" in gen_data:
-            conds_df = pd.DataFrame(gen_data["conditions"]).T
-            display_cols = [c for c in ["win_rate", "wilson_ci_lower", "wilson_ci_upper", "mean_kills", "mean_deaths"] if c in conds_df.columns]
-            st.dataframe(conds_df[display_cols], use_container_width=True)
 
-        # Unseen and Physics Gap metrics
-        unseen_gap = gen_data.get("gap_unseen")
-        phys_gap = gen_data.get("gap_physics")
-        unseen_ci = gen_data.get("gap_unseen_ci")
-        if unseen_gap is not None or phys_gap is not None:
-            g1, g2 = st.columns(2)
-            if unseen_gap is not None:
-                ci_str = f" [{unseen_ci[0]:+.4f}, {unseen_ci[1]:+.4f}]" if unseen_ci else ""
-                g1.metric("Unseen Map Gap (Δ_unseen)", f"{unseen_gap:+.4f}", help=f"95% CI:{ci_str}")
-            if phys_gap is not None:
-                g2.metric("Physics Shift Gap (Δ_physics)", f"{phys_gap:+.4f}")
-
-    # 4. Elo Ratings
-    elo_data = load_json(selected_run_dir, "elo.json")
-    if elo_data and "ratings" in elo_data:
-        st.subheader("🏆 Elo Tournament Ratings")
-        ratings_df = pd.DataFrame(list(elo_data["ratings"].items()), columns=["Participant", "Elo Rating"])
-        st.dataframe(ratings_df.sort_values(by="Elo Rating", ascending=False), use_container_width=True, hide_index=True)
-
-    # 5. Benchmark & Behaviour (Phase 10)
-    bench_data = load_json(selected_run_dir, "benchmark.json")
-    if bench_data:
-        st.subheader("📊 Final Benchmark & Behaviour")
-        if "opponents" in bench_data:
-            st.json(bench_data["opponents"])
-        if "behaviour" in bench_data:
-            st.json(bench_data["behaviour"])
-
-# 5. Visualizations & Replays
-st.subheader("🎥 Visualizations & Replays")
-outputs_dir = Path("outputs")
-if outputs_dir.exists():
+def draw_outputs():
+    st.subheader("Generated pictures")
+    outputs_dir = Path("outputs")
+    if not outputs_dir.exists():
+        st.caption("`outputs/` does not exist yet. Preview scripts write maps, matches, and replays there.")
+        return
     media_files = sorted(
-        [f for f in outputs_dir.iterdir() if f.suffix.lower() in [".gif", ".png", ".jpg", ".jpeg"]],
+        [f for f in outputs_dir.iterdir() if f.suffix.lower() in {".gif", ".png", ".jpg", ".jpeg"}],
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     )
-    if media_files:
-        chosen_media = st.selectbox("Select Preview / Replay", [f.name for f in media_files])
-        st.image(str(outputs_dir / chosen_media), caption=chosen_media)
-    else:
-        st.caption("No previews or replay animations found in `outputs/`.")
-else:
-    st.caption("Directory `outputs/` does not exist.")
+    if not media_files:
+        st.caption("No png, jpg, or gif files in `outputs/` yet.")
+        return
+    labels = [
+        f"{path.name}  ·  {datetime.fromtimestamp(path.stat().st_mtime):%H:%M:%S}"
+        for path in media_files
+    ]
+    chosen = st.selectbox("Preview", labels)
+    path = media_files[labels.index(chosen)]
+    st.image(str(path), caption=path.name)
 
+
+@st.fragment(run_every=timedelta(seconds=3))
+def live():
+    draw_runs()
+    draw_outputs()
+
+
+st.title("RL-Donut")
+st.caption("Training logs in `runs/` and pictures in `outputs/`. This page refreshes every 3 seconds.")
+live()

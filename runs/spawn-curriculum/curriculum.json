@@ -1,0 +1,8 @@
+{
+  "spec_version": "0.3",
+  "seed": 42,
+  "gate": 0.5,
+  "final_rung": "tiles_20",
+  "finished_official": false,
+  "updates": 400
+}

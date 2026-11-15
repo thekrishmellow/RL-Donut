@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from rl_donut.env.policy import PolicyContext
+from rl_donut.rl.circulate import MapRoamer, circulate
 from rl_donut.rl.model import ActorCritic
 
 
@@ -70,6 +71,7 @@ class LearnedPolicy:
         self.device = device or torch.device("cpu")
         self.model.to(self.device)
         self.model.eval()
+        self.roamer = MapRoamer()
 
     def act(self, obs: np.ndarray, ctx: PolicyContext | None = None):
         with torch.no_grad():
@@ -77,7 +79,13 @@ class LearnedPolicy:
             out = self.model.get_action_and_value(obs_tensor)
         if self.model.cont_dim:
             discrete, continuous, _, _, _ = out
-            return discrete.cpu().numpy().astype(np.int64), continuous.cpu().numpy().astype(np.float32)
+            discrete = discrete.cpu().numpy().astype(np.int64)
+            continuous = continuous.cpu().numpy().astype(np.float32)
+            if ctx is not None:
+                discrete, continuous = circulate(
+                    np.asarray(obs), discrete, continuous, ctx, self.roamer
+                )
+            return discrete, continuous
         actions, _, _, _ = out
         return actions.cpu().numpy()
 

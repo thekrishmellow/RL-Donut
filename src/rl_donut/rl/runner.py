@@ -7,6 +7,7 @@ import torch
 
 from rl_donut.env.match_env import MatchEnv
 from rl_donut.env.policy import Policy, PolicyContext
+from rl_donut.rl.circulate import MapRoamer, circulate
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.ppo import PPOTrainer, compute_gae
 from rl_donut.rl.rewards import RewardWeights, anneal_alpha, compute_reward
@@ -88,6 +89,7 @@ class Runner:
         self.episode_lengths = np.zeros(self.n_learner_envs, dtype=np.int32)
         self.completed_returns: list[float] = []
         self.completed_lengths: list[int] = []
+        self.roamer = MapRoamer()
 
     def pop_outcomes(self) -> list[int]:
         out, self.completed_outcomes = self.completed_outcomes, []
@@ -133,8 +135,17 @@ class Runner:
 
             l_actions = l_disc_t.cpu().numpy()
             l_cont = l_cont_t.cpu().numpy().astype(np.float32)
-            l_log_probs = l_log_probs_t.cpu().numpy()
             l_values = l_values_t.cpu().numpy().squeeze(-1)
+            learner_ctx = PolicyContext(self.env, self.learner_slots, self.rng)
+            l_actions, l_cont = circulate(l_obs, l_actions, l_cont, learner_ctx, self.roamer)
+            # Score the action that will actually be played, including a patrol step.
+            with torch.no_grad():
+                _, _, rescored, _, _ = self.learner.get_action_and_value(
+                    l_obs_t,
+                    torch.as_tensor(l_actions, dtype=torch.long, device=self.device),
+                    torch.as_tensor(l_cont, dtype=torch.float32, device=self.device),
+                )
+            l_log_probs = rescored.cpu().numpy()
 
             ctx = PolicyContext(env=self.env, slots=self.opponent_slots, rng=self.rng)
             o_actions, o_cont = self.opponent.act(o_obs, ctx)
