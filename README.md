@@ -11,7 +11,7 @@ self-play, and are evaluated on maps they have never seen.
 - [Submission notes](https://github.com/thekrishmellow/RL-Donut/blob/main/docs/SUBMISSION.md)
 - [Technical report (PDF)](https://github.com/thekrishmellow/RL-Donut/raw/main/docs/RL-Donut-technical-report.pdf)
 - [Project video](https://drive.google.com/file/d/1QNjxs0l5xYY2trPUynf7zUQ7hziUaumm/view?usp=sharing)
-- [Pitch deck (PPTX)](https://github.com/thekrishmellow/RL-Donut/raw/main/docs/RL-Donut-pitch.pptx)
+- [Pitch deck (PPTX)]([https://github.com/thekrishmellow/RL-Donut/raw/main/docs/RL-Donut-pitch.pptx](https://docs.google.com/presentation/d/1QFeyWFE-xN5fe9K1fP2g4MbMsCIznoLeScWh_DyORNk/edit?usp=sharing))
 
 ## Documentation
 
