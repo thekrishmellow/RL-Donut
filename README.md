@@ -16,6 +16,7 @@ self-play, and are evaluated on maps they have never seen.
 | [`docs/engine.md`](docs/engine.md) | How the game engine works, step by step, and the promises it keeps to the map generator |
 | [`docs/interface.md`](docs/interface.md) | The RL interface: actions, observations, the batched environment, with the measurements behind each choice |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | Progress report: what is finished, the training measurements, and what is left |
+| [`docs/RL-Donut-technical-report.pdf`](docs/RL-Donut-technical-report.pdf) | Technical report for submission: decisions, methods, and the measured training result |
 | [`docs/REPORT.md`](docs/REPORT.md) | Earlier sign-off. Read `docs/PROGRESS.md` for the current result |
 | [`docs/bots.md`](docs/bots.md) | Phase 4: the policy interface, scripted bots, replays and the renderer |
 | [`docs/handoff_phase5_6.md`](docs/handoff_phase5_6.md) | For the teammate building Phases 5–6: what exists, the interface contract, every step and decision, the merge checklist |
