@@ -354,19 +354,21 @@ const TOTAL = 10;
     fontFace: "Georgia", fontSize: 36, color: "FAFAF9", margin: 0,
   });
   const links = [
-    ["Submission notes", "github.com/thekrishmellow/RL-Donut/blob/main/docs/SUBMISSION.md"],
-    ["Technical report", "github.com/thekrishmellow/RL-Donut/blob/main/docs/RL-Donut-technical-report.pdf"],
-    ["This run", "runs/spawn-curriculum-14  on  main"],
+    ["Submission notes", "github.com/thekrishmellow/RL-Donut/blob/main/docs/SUBMISSION.md", "https://github.com/thekrishmellow/RL-Donut/blob/main/docs/SUBMISSION.md"],
+    ["Technical report", "github.com/thekrishmellow/RL-Donut/blob/main/docs/RL-Donut-technical-report.pdf", "https://github.com/thekrishmellow/RL-Donut/raw/main/docs/RL-Donut-technical-report.pdf"],
+    ["Google Slides", "docs.google.com/presentation/d/1QFeyWFE-xN5fe9K1fP2g4MbMsCIznoLeScWh_DyORNk", "https://docs.google.com/presentation/d/1QFeyWFE-xN5fe9K1fP2g4MbMsCIznoLeScWh_DyORNk/edit?usp=sharing"],
+    ["This run", "runs/spawn-curriculum-14  on  main", null],
   ];
   links.forEach((l, i) => {
-    const y = 3.4 + i * 0.95;
+    const y = 3.25 + i * 0.85;
     s.addText(l[0], {
-      x: 0.7, y, w: 3.2, h: 0.7,
+      x: 0.7, y, w: 3.2, h: 0.65,
       fontFace: "Georgia", fontSize: 18, color: "FDBA74", margin: 0, valign: "middle",
     });
     s.addText(l[1], {
-      x: 4.0, y, w: 8.5, h: 0.7,
-      fontFace: "Calibri", fontSize: 16, color: "E7E5E4", margin: 0, valign: "middle",
+      x: 4.0, y, w: 8.6, h: 0.65,
+      fontFace: "Calibri", fontSize: 14, color: "E7E5E4", margin: 0, valign: "middle",
+      hyperlink: l[2] ? { url: l[2] } : undefined,
     });
   });
 }
