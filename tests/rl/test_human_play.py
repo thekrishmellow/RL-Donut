@@ -85,6 +85,7 @@ def test_a_short_match_is_saved_and_played_back_by_two_agents(tmp_path, duel_map
     arena = HumanArena(
         tmp_path, _small_model(), deck, seconds=2.0, placement=note,
         learn_kwargs={"epochs": 1, "lr": 1e-4, "anchor_coef": 0.25},
+        practice_updates=0,
     )
     opening = arena.start()
     assert opening["width"] == 96 and "in sight" in opening["placement"]
@@ -117,6 +118,7 @@ def test_the_page_can_start_step_and_teach(tmp_path, duel_maps):
     arena = HumanArena(
         tmp_path, _small_model(), deck, seconds=2.0, placement=note,
         learn_kwargs={"epochs": 1, "lr": 1e-4},
+        practice_updates=0,
     )
     httpd = serve(arena, "127.0.0.1", 0, background=True)
     port = httpd.server_address[1]
@@ -134,7 +136,7 @@ def test_the_page_can_start_step_and_teach(tmp_path, duel_maps):
         assert b"Fight your agent" in page.read()
         started = call("POST", "/api/match/start", {"seconds": 2})
         assert started["frame"]["agents"][0]["team"] == 0
-        stepped = call("POST", "/api/match/step", {"move": -1, "jet": False, "shoot": True, "aim": 1.2})
+        stepped = call("POST", "/api/match/step", {"move": 0, "jet": False, "shoot": True, "aim": 1.2})
         assert stepped["decisions"] == 1
         taught = call("POST", "/api/match/teach", {"player": "bo"})
         assert taught["learned"]["latest_rows"] == 1

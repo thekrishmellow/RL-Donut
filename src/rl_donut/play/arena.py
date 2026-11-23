@@ -1,8 +1,8 @@
 """One person against the current network, then that network against the weights it just left.
 
-The person is team A. Their observation is the fair 330 numbers, and their controls are
-already in that frame, so copying those pairs teaches the same network team B uses.
-Team B's view is a mirror, and the environment mirrors its actions back.
+The person is team A. The opponent is a copy of the learned policy, so it moves and
+shoots. After the match the policy practices against the weights it just had, and
+human controls are kept only when they do not push the body into rock.
 """
 
 import json
@@ -17,12 +17,11 @@ from rl_donut.env.observe import OBS_DIM
 from rl_donut.env.policy import PolicyContext, team_slots
 from rl_donut.mapgen.generator import GeneratedMap
 from rl_donut.play.frames import grid_rows, scoreboard, snapshot
-from rl_donut.play.learn import learn_from_demos
 from rl_donut.play.store import DemoStore
 from rl_donut.rl.circulate import MapRoamer
 from rl_donut.rl.evaluate import legal_duration
 from rl_donut.rl.model import ActorCritic
-from rl_donut.rl.ppo import LearnedPolicy
+from rl_donut.play.selfplay import FightingPolicy
 from rl_donut.rl.spawn_curriculum import with_gap_spawns
 
 
@@ -74,6 +73,7 @@ class HumanArena:
         placement: str | None = None,
         brain: str = "the agent",
         learn_kwargs: dict | None = None,
+        practice_updates: int = 8,
     ):
         if model.obs_dim != OBS_DIM or not model.cont_dim:
             raise ValueError("the play agent needs the 330-number observation and an aim angle")
@@ -81,7 +81,7 @@ class HumanArena:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.model = model
         self.model.eval()
-        self.policy = LearnedPolicy(self.model, name="learned")
+        self.policy = FightingPolicy(self.model, name="learned")
         self.store = DemoStore(self.run_dir / "demos.npz")
         self.seconds = legal_duration(seconds)
         if placement is None:
@@ -93,6 +93,7 @@ class HumanArena:
             self.placement = placement
         self.brain = brain
         self.learn_kwargs = dict(learn_kwargs or {})
+        self.practice_updates = practice_updates
         self.rng = np.random.default_rng(0)
         self.cursor = 0
         self._lesson = 0
@@ -189,10 +190,16 @@ class HumanArena:
             self.saved = True
         human_board = scoreboard(self.env)
         before = {key: value.detach().cpu().clone() for key, value in self.model.state_dict().items()}
-        kwargs = dict(epochs=4, lr=1e-4, batch_size=512, anchor_coef=0.25, latest_weight=4.0, seed=self._lesson)
-        kwargs.update(self.learn_kwargs)
         self._lesson += 1
-        report = learn_from_demos(self.model, self.store.demonstrations(), **kwargs)
+        from rl_donut.play.selfplay import practice_round
+        report = practice_round(
+            self.model,
+            self.store.demonstrations(),
+            self.maps,
+            updates=self.practice_updates,
+            seconds=self.seconds,
+            seed=self._lesson,
+        )
         self._save_state(self.run_dir / "ckpt_previous.pt", before)
         self._save_state(self.run_dir / "ckpt_latest.pt", self.model.state_dict())
         ai = self._ai_match(before, report.improved)
@@ -259,8 +266,8 @@ class HumanArena:
 
     def _ai_match(self, before_state: dict, improved: bool) -> dict:
         """The updated actor plays its previous weights. No person is in this match."""
-        current = LearnedPolicy(self.model, name="after")
-        previous = LearnedPolicy(model_from_state(self.model, before_state), name="before")
+        current = FightingPolicy(self.model, name="after")
+        previous = FightingPolicy(model_from_state(self.model, before_state), name="before")
         index = self.cursor
         self.cursor += 1
         game_map = self.maps[index % len(self.maps)]
@@ -283,13 +290,16 @@ class HumanArena:
                 break
         if improved:
             message = (
-                "Blue is the agent after copying your controls. "
-                "Red is that same agent before this lesson. Nobody is playing."
+                "Blue practiced against a moving copy of itself. "
+                "Red is that copy from before the lesson. "
+                "The gun tracks an enemy it can see, and a step into rock was not copied. "
+                "Nobody is playing."
             )
         else:
             message = (
-                "This lesson did not make your actions more likely, so the weights stayed. "
-                "Both fighters are that same agent. Nobody is playing."
+                "Your match is saved. A step into rock is not a lesson. "
+                "Both fighters track an enemy they can see, and both can shoot. "
+                "Nobody is playing."
             )
         return {
             "seed": int(env.world.seeds[0]),

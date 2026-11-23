@@ -70,7 +70,7 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/play_human.py                                 # play the agent in the browser; your matches teach the next one
 ```
 
-`scripts/play_human.py` serves http://127.0.0.1:8765. You play team blue on a generated cave. The current network plays team red. When the match ends, every saved human match updates the actor, then that updated network plays its own previous weights with nobody at the keyboard. The lesson is stored in `runs/human-play/`, which stays git-ignored. The next launch continues from `ckpt_latest.pt`.
+`scripts/play_human.py` serves http://127.0.0.1:8765. You play team blue on a generated cave. Team red is a moving copy of the network: when it can see you, the shot follows that line, and a step into rock is cancelled. Your controls are saved in `runs/human-play/` (git-ignored). `scripts/train_duel_selfplay.py` trains that copy against itself.
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
 `rl_donut.mapgen.load_split("train")`. Rebuild only after changing the generator (see the
