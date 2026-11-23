@@ -4,7 +4,9 @@
 (discrete parts and the aim, in each agent's own frame), plays one decision step, and
 returns observations, events, `done`, `final_obs` and per-match `info`. A finished match
 restarts at once on the next map from a shuffled deck, so arrays always have the full batch
-shape. Matches all last the same time and start together, so they also end together.
+shape. Pass `restart_done=False` to leave a finished match where it ended, for a viewer;
+the next step is then illegal until `reset`. Matches all last the same time and start
+together, so they also end together.
 """
 
 from dataclasses import dataclass
@@ -98,7 +100,7 @@ class MatchEnv:
         self.started = True
         return self.observer.observe(self.vis)
 
-    def step(self, discrete: np.ndarray, continuous: np.ndarray) -> StepResult:
+    def step(self, discrete: np.ndarray, continuous: np.ndarray, *, restart_done: bool = True) -> StepResult:
         if not self.started:
             raise RuntimeError("call reset() before step()")
         w = self.world
@@ -116,11 +118,12 @@ class MatchEnv:
             ended = np.nonzero(done)[0]
             for m in ended:
                 info[m] = self._episode_info(m, ev)
-            w.load_maps(ended, self.deck.draw(len(ended)))
-            self.observer.reset(ended)
-            self._clear_stats(ended)
-            self.vis = visibility(w)
-            obs[ended] = self.observer.observe(self.vis)[ended]
+            if restart_done:
+                w.load_maps(ended, self.deck.draw(len(ended)))
+                self.observer.reset(ended)
+                self._clear_stats(ended)
+                self.vis = visibility(w)
+                obs[ended] = self.observer.observe(self.vis)[ended]
         return StepResult(obs=obs, events=ev, done=done, final_obs=final_obs, info=info)
 
     def get_state(self) -> np.ndarray:

@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RL-Donut — fight your agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --stone: #14110e;
+    --stone-2: #221c17;
+    --ember: #e4572e;
+    --ember-deep: #9a3412;
+    --sand: #f4ecdf;
+    --sand-2: #e7dccb;
+    --ink: #1c1917;
+    --muted: #6d645b;
+    --you: #24596f;
+    --agent: #c2410c;
+    --air: #e7dcc8;
+    --rock: #2a241f;
+    --line: #d9cbb8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    min-height: 100%;
+    color: var(--sand);
+    font-family: "Instrument Sans", "Avenir Next", sans-serif;
+    background:
+      radial-gradient(900px 420px at 0% -10%, #3c2418 0%, transparent 55%),
+      radial-gradient(700px 380px at 100% 100%, #1c2a30 0%, transparent 50%),
+      var(--stone);
+  }
+  body::before {
+    content: "";
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    opacity: 0.18;
+    background-image: radial-gradient(rgba(255, 244, 230, 0.18) 0.6px, transparent 0.6px);
+    background-size: 3px 3px;
+  }
+  .shell {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 22px;
+    min-height: 100%;
+    padding: 22px 22px 28px;
+  }
+  .stage { display: flex; flex-direction: column; min-width: 0; }
+  .kicker {
+    margin: 0 0 6px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: #f0b089;
+  }
+  h1 {
+    margin: 0;
+    font-family: "Instrument Serif", Georgia, serif;
+    font-weight: 400;
+    font-size: 46px;
+    letter-spacing: -0.03em;
+    line-height: 0.95;
+  }
+  .deck {
+    max-width: 46rem;
+    margin: 10px 0 16px;
+    color: #d6cdc2;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  .viewport {
+    position: relative;
+    flex: 1;
+    border: 1px solid #3a312a;
+    background: #0e0c0a;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    min-height: 420px;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+  }
+  .hud {
+    position: absolute;
+    left: 14px;
+    top: 12px;
+    display: flex;
+    gap: 18px;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #f6f1e7;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  }
+  .hud b { font-weight: 600; }
+  .you-dot, .agent-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+  }
+  .you-dot { background: #7eb6c9; }
+  .agent-dot { background: #f0a07a; }
+  aside {
+    background: var(--sand);
+    color: var(--ink);
+    padding: 22px 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: -12px 18px 40px rgba(0, 0, 0, 0.18);
+  }
+  aside h2 {
+    margin: 0;
+    font-family: "Instrument Serif", Georgia, serif;
+    font-size: 28px;
+    font-weight: 400;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  input, select {
+    width: 100%;
+    border: 1px solid var(--line);
+    background: white;
+    color: var(--ink);
+    font: inherit;
+    padding: 9px 10px;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button {
+    font: inherit;
+    border: 0;
+    padding: 11px 12px;
+    cursor: pointer;
+    background: var(--ink);
+    color: var(--sand);
+  }
+  button.primary { background: var(--ember); color: white; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+  button:disabled { opacity: 0.38; cursor: default; }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .note {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.45;
+    color: #3f3832;
+  }
+  .note strong { font-weight: 600; }
+  .keys {
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .keys b { color: var(--ink); font-weight: 600; }
+  @media (max-width: 980px) {
+    .shell { grid-template-columns: 1fr; }
+    h1 { font-size: 36px; }
+    .viewport { min-height: 320px; height: 58vh; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <section class="stage">
+    <p class="kicker">RL-Donut</p>
+    <h1>Fight your agent.</h1>
+    <p class="deck">You play the blue fighter on a generated cave. The red fighter is the network. When the match ends it studies every saved human match, then the new weights fight the weights from before the lesson, with nobody at the keyboard.</p>
+    <div class="viewport">
+      <canvas id="cave" aria-label="The cave match"></canvas>
+      <div class="hud">
+        <span><i class="you-dot"></i><b id="leftName">You</b> <span id="leftScore">0</span></span>
+        <span><i class="agent-dot"></i><b id="rightName">Agent</b> <span id="rightScore">0</span></span>
+        <span id="clock">0.0s</span>
+      </div>
+    </div>
+  </section>
+  <aside>
+    <h2>The lesson</h2>
+    <div>
+      <label for="player">Your name</label>
+      <input id="player" value="you" maxlength="40" autocomplete="nickname">
+    </div>
+    <div class="row">
+      <div>
+        <label for="seconds">Match</label>
+        <select id="seconds">
+          <option value="12">12 seconds</option>
+          <option value="20" selected>20 seconds</option>
+          <option value="60">60 seconds</option>
+        </select>
+      </div>
+      <div>
+        <label>Decisions</label>
+        <p class="note" id="decisions" style="margin-top:8px">0</p>
+      </div>
+    </div>
+    <div class="stack">
+      <button class="primary" id="start" type="button">Start the match</button>
+      <button class="ghost" id="teach" type="button" disabled>End and teach</button>
+      <button class="ghost" id="skip" type="button" disabled>Skip the AI bout</button>
+    </div>
+    <p class="note" id="caveNote">A cave loads when the match starts.</p>
+    <p class="note" id="lesson">Nothing has been taught in this sitting yet.</p>
+    <p class="note" id="aiNote"></p>
+    <p class="note" id="saved">Saved matches load with the page.</p>
+    <div class="stack">
+      <button id="restore" type="button">Restore the original agent</button>
+      <button class="ghost" id="forget" type="button">Forget saved matches</button>
+    </div>
+    <p class="keys"><b>A D</b> or arrows move. <b>W</b> or up jets. Aim with the mouse. Hold <b>J</b>, <b>K</b>, space, or the left button to shoot. Sight is from the body, so turning the gun does not find anyone.</p>
+  </aside>
+</div>
+<script>
+const canvas = document.getElementById("cave");
+const ctx = canvas.getContext("2d");
+const startBtn = document.getElementById("start");
+const teachBtn = document.getElementById("teach");
+const skipBtn = document.getElementById("skip");
+const lessonEl = document.getElementById("lesson");
+const aiEl = document.getElementById("aiNote");
+const caveEl = document.getElementById("caveNote");
+const savedEl = document.getElementById("saved");
+const decisionsEl = document.getElementById("decisions");
+const clockEl = document.getElementById("clock");
+const leftName = document.getElementById("leftName");
+const rightName = document.getElementById("rightName");
+const leftScore = document.getElementById("leftScore");
+const rightScore = document.getElementById("rightScore");
+
+const YOU = "#2f6f88";
+const AGENT = "#c2410c";
+
+let world = null;
+let frame = null;
+let mapCanvas = null;
+let mode = "idle";
+let nameMode = "human";
+let endRequested = false;
+let teaching = false;
+let watchFrames = [];
+let watchIndex = 0;
+let watchTimer = null;
+const keys = {};
+const mouse = { x: 20, y: 20, down: false, seen: false };
+
+function nameOf() {
+  return document.getElementById("player").value.trim() || "you";
+}
+
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "the match refused that");
+  return data;
+}
+
+function paintStatus(status) {
+  if (!status) return;
+  const who = status.players && status.players.length ? status.players.join(", ") : "no one yet";
+  savedEl.textContent = `${status.matches} saved match${status.matches === 1 ? "" : "es"}, ${status.rows} decisions, from ${who}. Brain: ${status.brain}.`;
+}
+
+function setBusy(next) {
+  mode = next;
+  const idle = next === "idle";
+  const playing = next === "play";
+  const watching = next === "watch";
+  startBtn.disabled = !idle;
+  teachBtn.disabled = !playing;
+  skipBtn.disabled = !watching;
+  document.getElementById("restore").disabled = !idle;
+  document.getElementById("forget").disabled = !idle;
+  document.getElementById("seconds").disabled = !idle;
+  document.getElementById("player").disabled = !idle;
+}
+
+function buildMap() {
+  mapCanvas = document.createElement("canvas");
+  mapCanvas.width = world.width;
+  mapCanvas.height = world.height;
+  const g = mapCanvas.getContext("2d");
+  const image = g.createImageData(world.width, world.height);
+  const pix = image.data;
+  for (let y = 0; y < world.height; y++) {
+    const row = world.grid[y];
+    for (let x = 0; x < world.width; x++) {
+      const rock = row[x] === "1";
+      const i = (y * world.width + x) * 4;
+      const color = rock ? [42, 36, 31] : [231, 220, 200];
+      pix[i] = color[0];
+      pix[i + 1] = color[1];
+      pix[i + 2] = color[2];
+      pix[i + 3] = 255;
+    }
+  }
+  g.putImageData(image, 0, 0);
+}
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.max(320, Math.floor(rect.width * dpr));
+  canvas.height = Math.max(240, Math.floor(rect.height * dpr));
+  draw();
+}
+
+function camera() {
+  if (!world) return { x: 0, y: 0, w: 96, h: 48 };
+  const aspect = canvas.width / Math.max(canvas.height, 1);
+  let viewW = 30;
+  let viewH = viewW / aspect;
+  if (viewH > world.height) {
+    viewH = world.height;
+    viewW = Math.min(world.width, viewH * aspect);
+  }
+  if (viewW > world.width) {
+    viewW = world.width;
+    viewH = Math.min(world.height, viewW / Math.max(aspect, 0.01));
+  }
+  const you = frame && frame.agents.find((agent) => agent.team === 0);
+  const foe = frame && frame.agents.find((agent) => agent.team === 1);
+  let cx = world.width / 2;
+  let cy = world.height / 2;
+  if (you) {
+    cx = you.x;
+    cy = you.y;
+    if (foe && Math.hypot(foe.x - you.x, foe.y - you.y) < viewW * 0.85) {
+      cx = (you.x + foe.x) / 2;
+      cy = (you.y + foe.y) / 2;
+    }
+  }
+  return {
+    x: Math.max(0, Math.min(world.width - viewW, cx - viewW / 2)),
+    y: Math.max(0, Math.min(world.height - viewH, cy - viewH / 2)),
+    w: viewW,
+    h: viewH,
+  };
+}
+
+function worldPoint(ev) {
+  const rect = canvas.getBoundingClientRect();
+  if (!world) return;
+  const cam = camera();
+  mouse.x = cam.x + ((ev.clientX - rect.left) / rect.width) * cam.w;
+  mouse.y = cam.y + ((ev.clientY - rect.top) / rect.height) * cam.h;
+  mouse.seen = true;
+}
+
+function draw() {
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#0e0c0a";
+  ctx.fillRect(0, 0, w, h);
+  if (!world || !frame || !mapCanvas) return;
+  const cam = camera();
+  const scale = w / cam.w;
+  const ox = -cam.x * scale;
+  const oy = -cam.y * scale;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(mapCanvas, cam.x, cam.y, cam.w, cam.h, 0, 0, w, h);
+  ctx.strokeStyle = "rgba(90, 50, 120, 0.85)";
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(ox, oy + world.kill_y * scale);
+  ctx.lineTo(ox + world.width * scale, oy + world.kill_y * scale);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  for (const shot of frame.shots || []) {
+    ctx.strokeStyle = shot[4] ? "#ff5a36" : "#e7c36a";
+    ctx.lineWidth = Math.max(1, scale * 0.12);
+    ctx.beginPath();
+    ctx.moveTo(ox + shot[0] * scale, oy + shot[1] * scale);
+    ctx.lineTo(ox + shot[2] * scale, oy + shot[3] * scale);
+    ctx.stroke();
+  }
+
+  const watching = nameMode === "ai";
+  for (const agent of frame.agents) {
+    const color = agent.team === 0 ? YOU : AGENT;
+    const x = ox + (agent.x - 0.4) * scale;
+    const y = oy + (agent.y - 0.8) * scale;
+    if (!agent.alive) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ox + (agent.x - 0.35) * scale, oy + (agent.y - 0.35) * scale);
+      ctx.lineTo(ox + (agent.x + 0.35) * scale, oy + (agent.y + 0.35) * scale);
+      ctx.moveTo(ox + (agent.x + 0.35) * scale, oy + (agent.y - 0.35) * scale);
+      ctx.lineTo(ox + (agent.x - 0.35) * scale, oy + (agent.y + 0.35) * scale);
+      ctx.stroke();
+      continue;
+    }
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, 0.8 * scale, 1.6 * scale);
+    if (agent.protect) {
+      ctx.strokeStyle = "#f4ecdf";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x - 1, y - 1, 0.8 * scale + 2, 1.6 * scale + 2);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(2, scale * 0.16);
+    ctx.beginPath();
+    ctx.moveTo(ox + agent.x * scale, oy + agent.y * scale);
+    ctx.lineTo(
+      ox + (agent.x + Math.cos(agent.aim) * 2.1) * scale,
+      oy + (agent.y + Math.sin(agent.aim) * 2.1) * scale
+    );
+    ctx.stroke();
+    const barW = 1.5 * scale;
+    const health = Math.max(0, Math.min(1, agent.health / 100));
+    const fuel = Math.max(0, Math.min(1, agent.fuel / 100));
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fillRect(ox + (agent.x - 0.75) * scale, y - 0.55 * scale, barW, 0.16 * scale);
+    ctx.fillStyle = "#8fbf6a";
+    ctx.fillRect(ox + (agent.x - 0.75) * scale, y - 0.55 * scale, barW * health, 0.16 * scale);
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fillRect(ox + (agent.x - 0.75) * scale, y - 0.34 * scale, barW, 0.12 * scale);
+    ctx.fillStyle = "#e0a15a";
+    ctx.fillRect(ox + (agent.x - 0.75) * scale, y - 0.34 * scale, barW * fuel, 0.12 * scale);
+    ctx.fillStyle = "#f6f1e7";
+    ctx.font = `${Math.max(11, scale * 0.7)}px Instrument Sans, sans-serif`;
+    const label = agent.team === 0
+      ? (watching ? "After" : "You")
+      : (watching ? "Before" : "Agent");
+    ctx.fillText(label, ox + (agent.x - 0.7) * scale, y - 0.7 * scale);
+  }
+
+  if (mode === "play" && mouse.seen) {
+    const mx = ox + mouse.x * scale;
+    const my = oy + mouse.y * scale;
+    ctx.strokeStyle = "rgba(244, 236, 223, 0.85)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(mx - 9, my);
+    ctx.lineTo(mx + 9, my);
+    ctx.moveTo(mx, my - 9);
+    ctx.lineTo(mx, my + 9);
+    ctx.stroke();
+  }
+
+  leftName.textContent = watching ? "After" : "You";
+  rightName.textContent = watching ? "Before" : "Agent";
+  leftScore.textContent = frame.score[0];
+  rightScore.textContent = frame.score[1];
+  clockEl.textContent = `${frame.time_left.toFixed(1)}s`;
+}
+
+function inputBody() {
+  const left = keys["a"] || keys["arrowleft"];
+  const right = keys["d"] || keys["arrowright"];
+  const you = frame && frame.agents.find((agent) => agent.team === 0);
+  let aim = 0;
+  if (mouse.seen && you) aim = Math.atan2(mouse.y - you.y, mouse.x - you.x);
+  return {
+    move: left === right ? 0 : (right ? 1 : -1),
+    jet: Boolean(keys["w"] || keys["arrowup"]),
+    shoot: Boolean(mouse.down || keys["j"] || keys["k"] || keys[" "]),
+    aim,
+  };
+}
+
+async function loop() {
+  if (mode !== "play") return;
+  try {
+    const data = await post("/api/match/step", inputBody());
+    frame = data.frame;
+    decisionsEl.textContent = String(data.decisions);
+    draw();
+    if (data.frame.done || endRequested) {
+      endRequested = false;
+      await teach();
+      return;
+    }
+  } catch (err) {
+    lessonEl.textContent = err.message;
+    setBusy("idle");
+    return;
+  }
+  if (mode === "play") setTimeout(loop, 66);
+}
+
+async function teach() {
+  if (teaching) return;
+  teaching = true;
+  setBusy("teach");
+  lessonEl.textContent = "Teaching the agent from your match, and from every match already saved…";
+  aiEl.textContent = "";
+  try {
+    const data = await post("/api/match/teach", { player: nameOf() });
+    const learned = data.learned;
+    const before = learned.logprob_before.toFixed(3);
+    const after = learned.logprob_after.toFixed(3);
+    lessonEl.textContent = learned.improved
+      ? `Your actions moved from ${before} to ${after}. Less negative means the agent would now do more of what you did. All saved players are in that update.`
+      : `Your actions stayed near ${before}. This sample did not sharpen the copy, so the weights stayed. The saved matches are still on file.`;
+    aiEl.textContent = `${data.ai.message} Kills ${data.ai.board.score[0]}–${data.ai.board.score[1]}. Damage ${data.ai.board.damage[0]} to ${data.ai.board.damage[1]}.`;
+    paintStatus(data.status);
+    if (data.ai.seed !== world.seed) {
+      caveEl.textContent = `The bout is on cave seed ${data.ai.seed}. ${data.ai.placement}`;
+    }
+    watchFrames = data.ai.frames;
+    watchIndex = 0;
+    nameMode = "ai";
+    teaching = false;
+    setBusy("watch");
+    playWatch();
+  } catch (err) {
+    teaching = false;
+    lessonEl.textContent = err.message;
+    setBusy("idle");
+  }
+}
+
+function playWatch() {
+  if (mode !== "watch") return;
+  if (watchIndex >= watchFrames.length) {
+    setBusy("idle");
+    lessonEl.textContent += " The bout is over. Start another match to fight the agent that just had this lesson.";
+    return;
+  }
+  frame = watchFrames[watchIndex];
+  watchIndex += 1;
+  draw();
+  watchTimer = setTimeout(playWatch, 66);
+}
+
+startBtn.addEventListener("click", async () => {
+  setBusy("play");
+  endRequested = false;
+  lessonEl.textContent = "Loading the cave…";
+  try {
+    const data = await post("/api/match/start", {
+      seconds: Number(document.getElementById("seconds").value),
+    });
+    world = data;
+    frame = data.frame;
+    nameMode = "human";
+    buildMap();
+    resize();
+    decisionsEl.textContent = "0";
+    caveEl.textContent = `Cave seed ${data.seed}. ${data.placement} You are blue, on the left.`;
+    lessonEl.textContent = "The match is live. End it when you want the agent to study what you did.";
+    aiEl.textContent = "";
+    paintStatus(data.status);
+    loop();
+  } catch (err) {
+    lessonEl.textContent = err.message;
+    setBusy("idle");
+  }
+});
+
+teachBtn.addEventListener("click", () => { endRequested = true; });
+skipBtn.addEventListener("click", () => {
+  if (watchTimer) clearTimeout(watchTimer);
+  if (watchFrames.length) {
+    frame = watchFrames[watchFrames.length - 1];
+    draw();
+  }
+  setBusy("idle");
+});
+document.getElementById("restore").addEventListener("click", async () => {
+  try {
+    paintStatus(await post("/api/agent/restore", {}));
+    lessonEl.textContent = "The original agent is back. Saved matches are still on file, so the next lesson can teach them again.";
+  } catch (err) {
+    lessonEl.textContent = err.message;
+  }
+});
+document.getElementById("forget").addEventListener("click", async () => {
+  if (!confirm("Forget every saved match? The current weights stay.")) return;
+  try {
+    paintStatus(await post("/api/demos/forget", {}));
+    lessonEl.textContent = "The saved matches are gone. The weights were not reset.";
+  } catch (err) {
+    lessonEl.textContent = err.message;
+  }
+});
+
+window.addEventListener("keydown", (ev) => {
+  keys[ev.key.toLowerCase()] = true;
+  if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(ev.key.toLowerCase()) && ev.target.tagName !== "INPUT") {
+    ev.preventDefault();
+  }
+});
+window.addEventListener("keyup", (ev) => { keys[ev.key.toLowerCase()] = false; });
+window.addEventListener("blur", () => { for (const key of Object.keys(keys)) keys[key] = false; mouse.down = false; });
+canvas.addEventListener("pointermove", worldPoint);
+canvas.addEventListener("pointerdown", (ev) => { mouse.down = true; worldPoint(ev); canvas.setPointerCapture(ev.pointerId); });
+canvas.addEventListener("pointerup", () => { mouse.down = false; });
+canvas.addEventListener("pointercancel", () => { mouse.down = false; });
+window.addEventListener("resize", resize);
+
+fetch("/api/status").then((res) => res.json()).then((status) => {
+  paintStatus(status);
+  if (status.placement) caveEl.textContent = status.placement;
+}).catch(() => { savedEl.textContent = "The page could not read the agent."; });
+resize();
+</script>
+</body>
+</html>

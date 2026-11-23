@@ -67,7 +67,10 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/bench_env.py --processes 1 2 4 8 --batches 256   # several env processes at once
 .venv/bin/python scripts/train_spawn_curriculum.py --updates 400       # PPO vs a static bot; widens the spawn gap after a 50% win rate
 .venv/bin/python -m streamlit run scripts/dashboard.py                 # training logs and pictures; refreshes every 3 seconds
+.venv/bin/python scripts/play_human.py                                 # play the agent in the browser; your matches teach the next one
 ```
+
+`scripts/play_human.py` serves http://127.0.0.1:8765. You play team blue on a generated cave. The current network plays team red. When the match ends, every saved human match updates the actor, then that updated network plays its own previous weights with nobody at the keyboard. The lesson is stored in `runs/human-play/`, which stays git-ignored. The next launch continues from `ckpt_latest.pt`.
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
 `rl_donut.mapgen.load_split("train")`. Rebuild only after changing the generator (see the
@@ -130,6 +133,7 @@ RL-Donut/
 │   ├── route_check.py
 │   ├── preview_rifle.py
 │   ├── view_match.py          Debug viewer: one match as a GIF and a filmstrip
+│   ├── play_human.py          Browser match: a person vs the agent, then the agent vs its previous weights
 │   ├── bench_engine.py        Engine speed check
 │   ├── bench_env.py           Full environment speed benchmark
 │   ├── aim_ceiling.py         Hit-rate ceiling of each aim design

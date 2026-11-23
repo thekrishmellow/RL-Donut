@@ -154,3 +154,23 @@ def test_state_sees_through_walls_and_orders_own_team_first(maps):
     assert s[0, 0, 0] == s[0, 0, 24] == 1 and s[0, 0, 12] == s[0, 0, 36] == 0     # 1v1: second slots empty
     assert s[0, 0, 2] == pytest.approx(w.x[0, 0] / W) and s[0, 0, 26] == pytest.approx(w.x[0, 1] / W)
     assert s[0, 1, 2] == pytest.approx((W - w.x[0, 1]) / W)                          # team B: itself first, mirrored
+
+
+def test_finished_match_can_stay_for_a_viewer(maps):
+    cfg = EngineConfig(match=MatchConfig(duration=2.0))
+    env = MatchEnv(1, maps=maps[:1], cfg=cfg, seed=1)
+    env.reset()
+    seed = int(env.world.seeds[0])
+    rng = np.random.default_rng(0)
+    done = False
+    steps = 0
+    while not done:
+        result = env.step(*random_actions(env, rng), restart_done=False)
+        done = bool(result.done[0])
+        steps += 1
+        assert steps <= 30
+    assert steps == 30
+    assert int(env.world.seeds[0]) == seed
+    assert int(env.world.tick[0]) == 60
+    with pytest.raises(ValueError):
+        env.step(*random_actions(env, rng), restart_done=False)
