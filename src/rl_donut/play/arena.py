@@ -21,7 +21,7 @@ from rl_donut.play.store import DemoStore
 from rl_donut.rl.circulate import MapRoamer
 from rl_donut.rl.evaluate import legal_duration
 from rl_donut.rl.model import ActorCritic
-from rl_donut.play.selfplay import FightingPolicy
+from rl_donut.rl.ppo import LearnedPolicy
 from rl_donut.rl.spawn_curriculum import with_gap_spawns
 
 
@@ -81,7 +81,7 @@ class HumanArena:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.model = model
         self.model.eval()
-        self.policy = FightingPolicy(self.model, name="learned")
+        self.policy = LearnedPolicy(self.model, name="learned")
         self.store = DemoStore(self.run_dir / "demos.npz")
         self.seconds = legal_duration(seconds)
         if placement is None:
@@ -266,8 +266,8 @@ class HumanArena:
 
     def _ai_match(self, before_state: dict, improved: bool) -> dict:
         """The updated actor plays its previous weights. No person is in this match."""
-        current = FightingPolicy(self.model, name="after")
-        previous = FightingPolicy(model_from_state(self.model, before_state), name="before")
+        current = LearnedPolicy(self.model, name="after")
+        previous = LearnedPolicy(model_from_state(self.model, before_state), name="before")
         index = self.cursor
         self.cursor += 1
         game_map = self.maps[index % len(self.maps)]
@@ -290,16 +290,12 @@ class HumanArena:
                 break
         if improved:
             message = (
-                "Blue practiced against a moving copy of itself. "
-                "Red is that copy from before the lesson. "
-                "The gun tracks an enemy it can see, and a step into rock was not copied. "
-                "Nobody is playing."
+                "Blue is the policy after this practice. Red is the policy from before it. "
+                "Both move and shoot from what they learned. Nobody is playing."
             )
         else:
             message = (
-                "Your match is saved. A step into rock is not a lesson. "
-                "Both fighters track an enemy they can see, and both can shoot. "
-                "Nobody is playing."
+                "Your match is saved. Both fighters are the learned policy. Nobody is playing."
             )
         return {
             "seed": int(env.world.seeds[0]),

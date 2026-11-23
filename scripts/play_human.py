@@ -16,7 +16,7 @@ import argparse
 from pathlib import Path
 
 from rl_donut.mapgen import load_split
-from rl_donut.play.arena import HumanArena, duel_deck, load_actor
+from rl_donut.play.arena import HumanArena, load_actor
 from rl_donut.play.server import serve
 
 
@@ -51,8 +51,9 @@ def main():
 
     path, label = resolve_checkpoint(args.run_dir, args.checkpoint, args.restart)
     print(f"Loading caves and {label}.", flush=True)
-    deck, placement = duel_deck(load_split("val"))
-    print(f"{len(deck)} duel caves. {placement}", flush=True)
+    deck = list(load_split("val")[:32])
+    placement = "Official spawns. The teams start where this cave placed them."
+    print(f"{len(deck)} caves. {placement}", flush=True)
     arena = HumanArena(
         args.run_dir,
         load_actor(path),

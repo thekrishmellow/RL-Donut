@@ -15,14 +15,14 @@ import numpy as np
 import torch
 
 from rl_donut.mapgen import load_split
-from rl_donut.play.arena import duel_deck, load_actor
-from rl_donut.play.physics_data import aim_error_degrees
-from rl_donut.play.selfplay import SelfOpponent, self_play_updates
+from rl_donut.play.arena import load_actor
+from rl_donut.play.selfplay import SelfOpponent, pretrain_aim, self_play_updates
 from rl_donut.play.store import DemoStore
 from rl_donut.rl.bots import StaticTargetBot
 from rl_donut.rl.evaluate import evaluate_policy
 from rl_donut.rl.model import ActorCritic
-from rl_donut.rl.ppo import LearnedPolicy
+from rl_donut.rl.ppo import LearnedPolicy, PPOConfig, PPOTrainer
+from rl_donut.rl.spawn_curriculum import RUNG_LADDER, maps_for_rung
 
 
 def _save(path: Path, model: ActorCritic, meta: dict) -> None:
@@ -66,9 +66,8 @@ def main():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     print("Loading caves.", flush=True)
-    train_maps, train_note = duel_deck(load_split("train"), limit=24)
-    val_maps, _ = duel_deck(load_split("val"), limit=8)
-    print(f"{len(train_maps)} train caves. {train_note}", flush=True)
+    train_all = load_split("train")
+    val_all = load_split("val")
     start = args.checkpoint if args.checkpoint.exists() else None
     model = load_actor(start)
     demos = None
@@ -76,51 +75,73 @@ def main():
         saved = DemoStore(args.demos).demonstrations()
         demos = saved
         print(f"Human rows on file: {len(saved)}", flush=True)
+    close = next(rung for rung in RUNG_LADDER if rung.name == "tiles_8")
+    print("Learning the aim from enemies the policy can see.", flush=True)
+    error = pretrain_aim(model, maps_for_rung(train_all, close, 12), rounds=80, seed=args.seed)
+    print(f"Aim median error after that pass: {error:.1f} deg", flush=True)
     args.out.mkdir(parents=True, exist_ok=True)
     log_path = args.out / "metrics.jsonl"
     best_score = -1.0
+    trainer = PPOTrainer(model, PPOConfig(lr=1e-4))
+    stages = [("tiles_8", 80), ("tiles_14", 60), ("tiles_20", 60), ("official", 80)]
+    completed = 0
 
-    def on_update(model, row):
-        nonlocal best_score
-        update = row["update"]
-        if update % args.eval_every == 0 or update == args.updates:
-            mirror = SelfOpponent(model)
-            mirror.pull(model)
-            versus_self = _eval(model, val_maps, mirror, args.seconds)
-            versus_still = _eval(model, val_maps, StaticTargetBot(), args.seconds)
-            row["versus_self"] = versus_self
-            row["versus_still"] = versus_still
-            print(
-                f"update {update:3d}  vs self {versus_self['wins']}/8  "
-                f"kills {versus_self['kills']:.2f}  dmg {versus_self['damage']:.0f}  "
-                f"vs still {versus_still['wins']}/8  kills {versus_still['kills']:.2f}  "
-                f"dmg {versus_still['damage']:.0f}",
-                flush=True,
-            )
-            score = versus_self["kills"] + versus_still["kills"]
-            _save(args.out / f"ckpt_{update:04d}.pt", model, row)
-            if score > best_score:
-                best_score = score
-                _save(args.out / "ckpt_best.pt", model, row)
-        else:
-            print(
-                f"update {update:3d}  return {row['mean_return']:.3f}  "
-                f"aim loss {row['aim_loss']:.3f}  human rows {row['human_rows']}",
-                flush=True,
-            )
-        with log_path.open("a") as handle:
-            handle.write(json.dumps(row) + "\n")
+    def run_stage(name, count):
+        nonlocal completed, best_score
+        rung = next(item for item in RUNG_LADDER if item.name == name)
+        train_maps = maps_for_rung(train_all, rung, 16)
+        val_maps = maps_for_rung(val_all, rung, 8)
+        print(f"Stage {name}: {count} updates against a moving copy.", flush=True)
 
-    self_play_updates(
-        model, train_maps, args.updates,
-        n_matches=args.n_matches,
-        n_steps=args.n_steps,
-        seconds=args.seconds,
-        seed=args.seed,
-        demos=demos,
-        on_update=on_update,
-    )
-    _save(args.out / "ckpt_latest.pt", model, {"updates": args.updates, "best_score": best_score})
+        def on_update(live, row):
+            nonlocal best_score
+            update = completed + row["update"]
+            row["update"] = update
+            row["stage"] = name
+            if row["update"] % args.eval_every == 0 or row["update"] == completed + count:
+                mirror = SelfOpponent(live)
+                mirror.pull(live)
+                versus_self = _eval(live, val_maps, mirror, args.seconds)
+                versus_still = _eval(live, val_maps, StaticTargetBot(), args.seconds)
+                row["versus_self"] = versus_self
+                row["versus_still"] = versus_still
+                print(
+                    f"{name} update {update:3d}  vs self {versus_self['wins']}/8  "
+                    f"kills {versus_self['kills']:.2f}  dmg {versus_self['damage']:.0f}  "
+                    f"vs still {versus_still['wins']}/8  kills {versus_still['kills']:.2f}  "
+                    f"dmg {versus_still['damage']:.0f}",
+                    flush=True,
+                )
+                score = versus_self["kills"] + versus_still["kills"]
+                _save(args.out / f"ckpt_{update:04d}.pt", live, row)
+                if score > best_score:
+                    best_score = score
+                    _save(args.out / "ckpt_best.pt", live, row)
+            else:
+                print(
+                    f"{name} update {update:3d}  return {row['mean_return']:.3f}  "
+                    f"aim loss {row['aim_loss']:.3f}",
+                    flush=True,
+                )
+            with log_path.open("a") as handle:
+                handle.write(json.dumps(row) + "\n")
+
+        self_play_updates(
+            model, train_maps, count,
+            n_matches=args.n_matches,
+            n_steps=args.n_steps,
+            seconds=args.seconds,
+            seed=args.seed + completed,
+            aim_coef=0.2,
+            demos=demos,
+            trainer=trainer,
+            on_update=on_update,
+        )
+        completed += count
+
+    for stage_name, stage_count in stages:
+        run_stage(stage_name, stage_count)
+    _save(args.out / "ckpt_latest.pt", model, {"updates": completed, "best_score": best_score})
     print(f"Best combined kills: {best_score:.2f}. Wrote {args.out}", flush=True)
 
 

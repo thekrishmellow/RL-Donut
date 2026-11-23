@@ -7,25 +7,16 @@ can actually see, which is the line a hitscan rifle has to follow.
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from rl_donut.env.config import EngineConfig, MatchConfig
 from rl_donut.env.match_env import MatchEnv
-from rl_donut.play.physics_data import corrected_aim, engage, legal_demonstrations, seen_aim_target
+from rl_donut.play.physics_data import corrected_aim, legal_demonstrations, seen_aim_target
 from rl_donut.rl.clone import Demonstrations, action_log_prob
 from rl_donut.play.learn import LearnReport
 from rl_donut.rl.evaluate import legal_duration
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.ppo import LearnedPolicy, PPOConfig, PPOTrainer
 from rl_donut.rl.runner import Runner
-
-
-class FightingPolicy(LearnedPolicy):
-    """The learned body, with the gun turned onto an enemy it can see."""
-
-    def act(self, obs, ctx=None):
-        discrete, continuous = super().act(obs, ctx)
-        return engage(obs, discrete, continuous)
 
 
 class SelfOpponent:
@@ -35,7 +26,7 @@ class SelfOpponent:
 
     def __init__(self, model: ActorCritic):
         self.model = _clone(model)
-        self.policy = FightingPolicy(self.model, name="self")
+        self.policy = LearnedPolicy(self.model, name="self")
 
     def pull(self, live: ActorCritic) -> None:
         self.model.load_state_dict(live.state_dict())
@@ -65,13 +56,7 @@ def aim_and_fire(model: ActorCritic, optimizer, obs: np.ndarray, coef: float = 1
     latent = model.actor_backbone(obs_t)
     mean = model.aim_mean(latent)
     error = torch.atan2(torch.sin(mean - target_t), torch.cos(mean - target_t)).squeeze(-1)
-    loss = error.pow(2).mean()
-    close = error.detach().abs() < 0.25
-    if int(close.sum()) >= 4:
-        logits = model.action_heads[2](latent)
-        fired = torch.ones(int(close.sum()), dtype=torch.long, device=device)
-        loss = loss + 0.5 * F.cross_entropy(logits[close], fired)
-    loss = coef * loss
+    loss = coef * error.pow(2).mean()
     kept = {key: value.detach().clone() for key, value in model.state_dict().items()}
     optimizer.zero_grad()
     loss.backward()
@@ -83,6 +68,81 @@ def aim_and_fire(model: ActorCritic, optimizer, obs: np.ndarray, coef: float = 1
         return 0.0
     model.eval()
     return float(loss.detach())
+
+
+def median_aim_error(model: ActorCritic, obs: np.ndarray) -> float:
+    """Median degrees between the network's aim and a seen enemy. NaN if nobody is seen."""
+    from rl_donut.play.physics_data import aim_error_degrees
+
+    _, seen = seen_aim_target(obs)
+    if int(np.count_nonzero(seen)) < 4:
+        return float("nan")
+    device = next(model.parameters()).device
+    obs_t = torch.as_tensor(np.asarray(obs, dtype=np.float32)[seen], device=device)
+    with torch.no_grad():
+        mean = model.aim_mean(model.actor_backbone(obs_t)).squeeze(-1).detach().cpu().numpy()
+    full = np.zeros(len(obs), dtype=np.float64)
+    full[seen] = mean
+    return aim_error_degrees(full, obs)
+
+
+def gather_observations(model: ActorCritic, maps, *, seconds: float = 6.0, n_matches: int = 4, seed: int = 0) -> np.ndarray:
+    """States from a short match of the policy against its own copy."""
+    from rl_donut.env.policy import PolicyContext, team_slots
+
+    cfg = EngineConfig(team_size=1, match=MatchConfig(duration=legal_duration(seconds)))
+    env = MatchEnv(n_matches, team_size=1, seed=seed, cfg=cfg, maps=list(maps)[: max(n_matches, 4)])
+    policy = LearnedPolicy(model, name="gather")
+    opponent = SelfOpponent(model)
+    opponent.pull(model)
+    obs = env.reset()
+    rng = np.random.default_rng(seed)
+    rows = [obs.reshape(-1, model.obs_dim)]
+    steps = max(1, int(seconds * env.world.cfg.tick_rate / env.world.cfg.match.decision_ticks))
+    for _ in range(steps):
+        discrete = np.zeros((n_matches, env.n_agents, 3), dtype=np.int64)
+        continuous = np.zeros((n_matches, env.n_agents, 1), dtype=np.float32)
+        for team, actor in ((0, policy), (1, opponent)):
+            slots = team_slots(env, team)
+            chosen, aim = actor.act(obs[slots[:, 0], slots[:, 1]], PolicyContext(env, slots, rng))
+            discrete[slots[:, 0], slots[:, 1]] = chosen
+            continuous[slots[:, 0], slots[:, 1]] = aim
+        result = env.step(discrete, continuous, restart_done=False)
+        obs = result.obs
+        rows.append(obs.reshape(-1, model.obs_dim))
+        if result.done.all():
+            break
+    return np.concatenate(rows, axis=0)
+
+
+def pretrain_aim(model: ActorCritic, maps, *, rounds: int = 80, lr: float = 3e-3, seed: int = 0) -> float:
+    """Fit the aim mean on a fixed set of states where an enemy is already visible.
+
+    One pass over a moving policy is not enough for the network to learn the angle.
+    The same states are reused until the median miss is under 8 degrees, or the
+    step budget runs out.
+    """
+    chunks = [gather_observations(model, maps, seed=seed + i) for i in range(3)]
+    obs = np.concatenate(chunks, axis=0)
+    _, seen = seen_aim_target(obs)
+    obs = obs[seen]
+    if len(obs) < 32:
+        print("Not enough visible enemies to learn an aim.", flush=True)
+        return float("nan")
+    params = list(model.actor_backbone.parameters()) + list(model.aim_mean.parameters())
+    optimizer = torch.optim.Adam(params, lr=lr, eps=1e-5)
+    rng = np.random.default_rng(seed)
+    error = float("nan")
+    for step in range(rounds):
+        pick = rng.choice(len(obs), size=min(512, len(obs)), replace=False)
+        aim_and_fire(model, optimizer, obs[pick], coef=1.0)
+        if step % 10 == 0 or step + 1 == rounds:
+            error = median_aim_error(model, obs[:1024])
+            print(f"aim step {step + 1:3d}  median error {error:.1f} deg  on {len(obs)} states", flush=True)
+        if np.isfinite(error) and error < 8:
+            break
+    model.eval()
+    return error
 
 
 def imitate_legal(

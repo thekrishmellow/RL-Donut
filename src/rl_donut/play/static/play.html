@@ -183,7 +183,7 @@
   <section class="stage">
     <p class="kicker">RL-Donut</p>
     <h1>Fight your agent.</h1>
-    <p class="deck">You play the blue fighter on a generated cave. The red fighter moves, and when it can see you the shot follows that line. It will not walk into the rock. After the match your controls are saved, then two copies fight with nobody at the keyboard.</p>
+    <p class="deck">You play the blue fighter. The view stays on you, so you move only when you press a direction. The red fighter is the learned policy. You start on this cave’s own spawns, not lined up in front of each other. After the match your controls are saved, then the two policies fight with nobody at the keyboard.</p>
     <div class="viewport">
       <canvas id="cave" aria-label="The cave match"></canvas>
       <div class="hud">
@@ -341,17 +341,8 @@ function camera() {
     viewH = Math.min(world.height, viewW / Math.max(aspect, 0.01));
   }
   const you = frame && frame.agents.find((agent) => agent.team === 0);
-  const foe = frame && frame.agents.find((agent) => agent.team === 1);
-  let cx = world.width / 2;
-  let cy = world.height / 2;
-  if (you) {
-    cx = you.x;
-    cy = you.y;
-    if (foe && Math.hypot(foe.x - you.x, foe.y - you.y) < viewW * 0.85) {
-      cx = (you.x + foe.x) / 2;
-      cy = (you.y + foe.y) / 2;
-    }
-  }
+  const cx = you ? you.x : world.width / 2;
+  const cy = you ? you.y : world.height / 2;
   return {
     x: Math.max(0, Math.min(world.width - viewW, cx - viewW / 2)),
     y: Math.max(0, Math.min(world.height - viewH, cy - viewH / 2)),
@@ -470,16 +461,24 @@ function draw() {
   clockEl.textContent = `${frame.time_left.toFixed(1)}s`;
 }
 
+function clearKeys() {
+  for (const key of Object.keys(keys)) keys[key] = false;
+  mouse.down = false;
+}
+
 function inputBody() {
-  const left = keys["a"] || keys["arrowleft"];
-  const right = keys["d"] || keys["arrowright"];
+  const left = keys["KeyA"] || keys["ArrowLeft"];
+  const right = keys["KeyD"] || keys["ArrowRight"];
   const you = frame && frame.agents.find((agent) => agent.team === 0);
   let aim = 0;
   if (mouse.seen && you) aim = Math.atan2(mouse.y - you.y, mouse.x - you.x);
+  let move = 0;
+  if (left && !right) move = -1;
+  else if (right && !left) move = 1;
   return {
-    move: left === right ? 0 : (right ? 1 : -1),
-    jet: Boolean(keys["w"] || keys["arrowup"]),
-    shoot: Boolean(mouse.down || keys["j"] || keys["k"] || keys[" "]),
+    move,
+    jet: Boolean(keys["KeyW"] || keys["ArrowUp"]),
+    shoot: Boolean(mouse.down || keys["KeyJ"] || keys["KeyK"] || keys["Space"]),
     aim,
   };
 }
@@ -552,7 +551,8 @@ function playWatch() {
 startBtn.addEventListener("click", async () => {
   setBusy("play");
   endRequested = false;
-  lessonEl.textContent = "Loading the cave…";
+    lessonEl.textContent = "Loading the cave…";
+    clearKeys();
   try {
     const data = await post("/api/match/start", {
       seconds: Number(document.getElementById("seconds").value),
@@ -602,13 +602,13 @@ document.getElementById("forget").addEventListener("click", async () => {
 });
 
 window.addEventListener("keydown", (ev) => {
-  keys[ev.key.toLowerCase()] = true;
-  if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(ev.key.toLowerCase()) && ev.target.tagName !== "INPUT") {
-    ev.preventDefault();
-  }
+  if (ev.repeat) return;
+  if (ev.target && ev.target.tagName === "INPUT") return;
+  keys[ev.code] = true;
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(ev.code)) ev.preventDefault();
 });
-window.addEventListener("keyup", (ev) => { keys[ev.key.toLowerCase()] = false; });
-window.addEventListener("blur", () => { for (const key of Object.keys(keys)) keys[key] = false; mouse.down = false; });
+window.addEventListener("keyup", (ev) => { keys[ev.code] = false; });
+window.addEventListener("blur", clearKeys);
 canvas.addEventListener("pointermove", worldPoint);
 canvas.addEventListener("pointerdown", (ev) => { mouse.down = true; worldPoint(ev); canvas.setPointerCapture(ev.pointerId); });
 canvas.addEventListener("pointerup", () => { mouse.down = false; });
