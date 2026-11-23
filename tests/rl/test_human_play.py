@@ -10,10 +10,8 @@ import torch
 from rl_donut.env.observe import OBS_DIM
 from rl_donut.mapgen import load_split
 from rl_donut.play.arena import HumanArena, duel_deck
-from rl_donut.play.learn import learn_from_demos, row_weights
 from rl_donut.play.server import serve
 from rl_donut.play.store import DemoStore
-from rl_donut.rl.clone import Demonstrations
 from rl_donut.rl.model import ActorCritic
 
 
@@ -27,11 +25,6 @@ def duel_maps():
 def _small_model():
     torch.manual_seed(0)
     return ActorCritic(OBS_DIM, (3, 2, 2), hidden_dim=32, cont_dim=1)
-
-
-def test_row_weights_favour_the_newest_match():
-    weights = row_weights(np.array([0, 0, 1, 1]), 4)
-    np.testing.assert_array_equal(weights, [1, 1, 4, 4])
 
 
 def test_saved_matches_round_trip_and_keep_their_order(tmp_path):
@@ -50,42 +43,10 @@ def test_saved_matches_round_trip_and_keep_their_order(tmp_path):
     assert store.count() == 0
 
 
-def test_learning_raises_the_chance_of_the_played_action():
-    torch.manual_seed(0)
-    model = ActorCritic(8, (3, 2, 2), hidden_dim=32, cont_dim=1)
-    obs = np.zeros((64, 8), dtype=np.float32)
-    obs[:, 0] = 1
-    discrete = np.tile(np.array([[2, 1, 1]], dtype=np.int64), (64, 1))
-    continuous = np.full((64, 1), 0.3, dtype=np.float32)
-    demos = Demonstrations(obs, discrete, continuous, np.zeros(64, dtype=np.int64))
-    report = learn_from_demos(
-        model, demos, epochs=12, lr=1e-3, batch_size=32, anchor_coef=0.0, seed=0
-    )
-    assert report.improved
-    assert report.logprob_after > report.logprob_before + 0.2
-
-
-def test_a_lesson_that_does_not_fit_keeps_the_starting_weights():
-    torch.manual_seed(0)
-    model = ActorCritic(8, (3, 2, 2), hidden_dim=16, cont_dim=1)
-    before = {key: value.detach().clone() for key, value in model.state_dict().items()}
-    obs = np.zeros((16, 8), dtype=np.float32)
-    demos = Demonstrations(
-        obs, np.zeros((16, 3), dtype=np.int64), np.zeros((16, 1), dtype=np.float32),
-        np.zeros(16, dtype=np.int64),
-    )
-    report = learn_from_demos(model, demos, epochs=2, lr=0.0, anchor_coef=0.0, seed=0)
-    assert report.improved is False
-    for key, value in model.state_dict().items():
-        torch.testing.assert_close(value, before[key])
-
-
 def test_a_short_match_is_saved_and_played_back_by_two_agents(tmp_path, duel_maps):
     deck, note = duel_maps
     arena = HumanArena(
-        tmp_path, _small_model(), deck, seconds=2.0, placement=note,
-        learn_kwargs={"epochs": 1, "lr": 1e-4, "anchor_coef": 0.25},
-        practice_updates=0,
+        tmp_path, _small_model(), deck,         seconds=2.0, placement=note, practice_updates=0,
     )
     opening = arena.start()
     assert opening["width"] == 96 and "in sight" in opening["placement"]
@@ -116,9 +77,7 @@ def test_a_short_match_is_saved_and_played_back_by_two_agents(tmp_path, duel_map
 def test_the_page_can_start_step_and_teach(tmp_path, duel_maps):
     deck, note = duel_maps
     arena = HumanArena(
-        tmp_path, _small_model(), deck, seconds=2.0, placement=note,
-        learn_kwargs={"epochs": 1, "lr": 1e-4},
-        practice_updates=0,
+        tmp_path, _small_model(), deck,         seconds=2.0, placement=note, practice_updates=0,
     )
     httpd = serve(arena, "127.0.0.1", 0, background=True)
     port = httpd.server_address[1]

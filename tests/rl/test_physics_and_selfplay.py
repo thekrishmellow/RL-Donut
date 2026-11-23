@@ -68,22 +68,41 @@ def test_aim_loss_turns_the_gun_toward_a_seen_enemy():
     assert error() < before - 0.2
 
 
-def test_a_seen_enemy_is_aimed_at_and_a_wall_step_is_cancelled():
-    from rl_donut.play.physics_data import engage
+def test_a_step_into_rock_is_turned_off():
+    from rl_donut.play.physics_data import hold_in_air
     obs = _obs(1)
-    seen = FEATURE_NAMES.index("enemy0_seen_by_me")
-    dx = FEATURE_NAMES.index("enemy0_dx")
-    dy = FEATURE_NAMES.index("enemy0_dy")
-    obs[0, seen] = 1
-    obs[0, dx] = 0
-    obs[0, dy] = 1
     _paint(obs, CROP_H // 2, CROP_W // 2 + 1)
     discrete = np.array([[2, 0, 0]], dtype=np.int64)
     continuous = np.zeros((1, 1), np.float32)
-    discrete, continuous = engage(obs, discrete, continuous)
+    discrete, continuous = hold_in_air(obs, discrete, continuous)
     assert int(discrete[0, 0]) == 1
-    assert int(discrete[0, 2]) == 1
-    assert abs(float(continuous[0, 0]) - np.pi / 2) < 1e-5
+    assert int(discrete[0, 2]) == 0
+
+
+def test_the_opponent_comes_toward_a_player_who_stands_still():
+    from rl_donut.env.config import EngineConfig, MatchConfig
+    from rl_donut.env.match_env import MatchEnv
+    from rl_donut.env.policy import PolicyContext, team_slots
+    from rl_donut.mapgen import load_split
+    from rl_donut.play.arena import HuntingPolicy
+
+    cfg = EngineConfig(team_size=1, match=MatchConfig(duration=8.0))
+    env = MatchEnv(1, team_size=1, seed=1, cfg=cfg, maps=load_split("val")[:1])
+    obs = env.reset()
+    hunter = HuntingPolicy()
+    slots = team_slots(env, 1)
+    rng = np.random.default_rng(0)
+    start = float(np.hypot(env.world.x[0, 1] - env.world.x[0, 0], env.world.y[0, 1] - env.world.y[0, 0]))
+    for _ in range(60):
+        discrete = np.zeros((1, 2, 3), dtype=np.int64)
+        continuous = np.zeros((1, 2, 1), dtype=np.float32)
+        discrete[0, 0] = (1, 0, 0)
+        chosen, aim = hunter.act(obs[0, 1:2], PolicyContext(env, slots, rng))
+        discrete[0, 1] = chosen[0]
+        continuous[0, 1] = aim[0]
+        obs = env.step(discrete, continuous, restart_done=False).obs
+    end = float(np.hypot(env.world.x[0, 1] - env.world.x[0, 0], env.world.y[0, 1] - env.world.y[0, 0]))
+    assert end < start - 1.5
 
 
 def test_the_opponent_is_a_copy_that_can_act():

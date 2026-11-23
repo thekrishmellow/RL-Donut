@@ -63,7 +63,7 @@ def main():
         brain=label,
         # A match is saved and filtered here. The self-play fit is scripts/train_duel_selfplay.py,
         # so a lesson in the browser cannot wipe a fighter that has already learned to shoot.
-        practice_updates=0,
+        practice_updates=4,
     )
     print(f"Saved matches: {arena.store.matches()}. Decisions on file: {arena.store.count()}.", flush=True)
     serve(arena, args.host, args.port)

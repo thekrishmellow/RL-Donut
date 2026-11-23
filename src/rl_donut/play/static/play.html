@@ -183,7 +183,7 @@
   <section class="stage">
     <p class="kicker">RL-Donut</p>
     <h1>Fight your agent.</h1>
-    <p class="deck">You play the blue fighter. The view stays on you, so you move only when you press a direction. The red fighter is the learned policy. You start on this cave’s own spawns, not lined up in front of each other. After the match your controls are saved, then the two policies fight with nobody at the keyboard.</p>
+    <p class="deck">You play the blue fighter. The view stays on you and opens wide enough to show the other fighter. The red fighter flies the cave toward you and shoots when it can see you. You start on this cave’s own spawns. End and teach practices inside the real match engine, and a control that would enter rock is left out.</p>
     <div class="viewport">
       <canvas id="cave" aria-label="The cave match"></canvas>
       <div class="hud">
@@ -330,7 +330,7 @@ function resize() {
 function camera() {
   if (!world) return { x: 0, y: 0, w: 96, h: 48 };
   const aspect = canvas.width / Math.max(canvas.height, 1);
-  let viewW = 30;
+  let viewW = 64;
   let viewH = viewW / aspect;
   if (viewH > world.height) {
     viewH = world.height;
@@ -341,8 +341,19 @@ function camera() {
     viewH = Math.min(world.height, viewW / Math.max(aspect, 0.01));
   }
   const you = frame && frame.agents.find((agent) => agent.team === 0);
+  const foe = frame && frame.agents.find((agent) => agent.team === 1);
   const cx = you ? you.x : world.width / 2;
   const cy = you ? you.y : world.height / 2;
+  if (you && foe) {
+    const reachW = Math.abs(foe.x - you.x) * 2 + 10;
+    const reachH = Math.abs(foe.y - you.y) * 2 + 8;
+    viewW = Math.max(viewW, Math.min(world.width, reachW));
+    viewH = Math.max(viewH, Math.min(world.height, reachH));
+    const needW = viewH * aspect;
+    const needH = viewW / aspect;
+    viewW = Math.min(world.width, Math.max(viewW, needW));
+    viewH = Math.min(world.height, Math.max(viewH, needH));
+  }
   return {
     x: Math.max(0, Math.min(world.width - viewW, cx - viewW / 2)),
     y: Math.max(0, Math.min(world.height - viewH, cy - viewH / 2)),

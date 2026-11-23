@@ -6,11 +6,9 @@ rows are not lessons. When an enemy is actually seen, the shot that connects is
 the angle of their offset, and a human aim close to that line is kept.
 """
 
-import math
-
 import numpy as np
 
-from rl_donut.env.observe import CROP_H, CROP_W, FEATURE_NAMES, POSITION_SCALE
+from rl_donut.env.observe import CROP_H, CROP_W, FEATURE_NAMES
 from rl_donut.rl.clone import Demonstrations
 
 
@@ -85,12 +83,11 @@ def legal_demonstrations(demos: Demonstrations) -> Demonstrations:
     )
 
 
-def engage(obs: np.ndarray, discrete: np.ndarray, continuous: np.ndarray):
-    """Aim along a seen enemy and refuse a control that enters rock.
+def hold_in_air(obs: np.ndarray, discrete: np.ndarray, continuous: np.ndarray):
+    """Turn off a move or a jet that the tile window shows running into rock.
 
-    The offset is already in the observation, in the agent's own frame. A 6° cone
-    only hits if that is the angle it fires. Movement that the tile window shows
-    running into rock is turned off, so the body stays in the air the engine allows.
+    The engine would stop the body on that tile anyway. Dropping the control
+    here means the policy is not rewarded for pressing into a building.
     """
     discrete = np.array(discrete, copy=True)
     continuous = np.array(continuous, dtype=np.float32, copy=True)
@@ -100,10 +97,6 @@ def engage(obs: np.ndarray, discrete: np.ndarray, continuous: np.ndarray):
     blocked = presses_rock(obs, discrete)
     discrete[blocked, 0] = 1
     discrete[blocked, 1] = 0
-    target, seen = seen_aim_target(obs)
-    distance = np.hypot(obs[..., _DX], obs[..., _DY]) * POSITION_SCALE
-    continuous[seen, 0] = target[seen]
-    discrete[seen & (distance <= POSITION_SCALE), 2] = 1
     return discrete, continuous
 
 
@@ -115,7 +108,3 @@ def aim_error_degrees(predicted: np.ndarray, obs: np.ndarray) -> float:
     predicted = np.asarray(predicted, dtype=np.float64).reshape(-1)
     error = np.arctan2(np.sin(predicted[seen] - target[seen]), np.cos(predicted[seen] - target[seen]))
     return float(np.degrees(np.median(np.abs(error))))
-
-
-def _finite(value: float) -> float:
-    return value if math.isfinite(value) else float("nan")

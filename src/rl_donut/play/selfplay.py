@@ -291,6 +291,9 @@ def practice_round(
             n_matches=min(n_matches, len(maps)),
             seconds=seconds,
             seed=seed,
+            lr=1e-4,
+            aim_coef=0.15,
+            n_steps=48,
             demos=legal if len(legal) else None,
         )
     after = _mean_log_prob(model, legal)

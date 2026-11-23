@@ -1,7 +1,7 @@
 """One person against the current network, then that network against the weights it just left.
 
-The person is team A. The opponent is a copy of the learned policy, so it moves and
-shoots. After the match the policy practices against the weights it just had, and
+The person is team A. The opponent flies the cave toward them and shoots when it
+can see them. After the match the learned policy practices in the match engine, and
 human controls are kept only when they do not push the body into rock.
 """
 
@@ -11,14 +11,16 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from rl_donut.env.bots import RusherBot
 from rl_donut.env.config import EngineConfig, MatchConfig
 from rl_donut.env.match_env import MatchEnv
 from rl_donut.env.observe import OBS_DIM
+from rl_donut.env.perception import Reaction
 from rl_donut.env.policy import PolicyContext, team_slots
 from rl_donut.mapgen.generator import GeneratedMap
 from rl_donut.play.frames import grid_rows, scoreboard, snapshot
+from rl_donut.play.physics_data import hold_in_air
 from rl_donut.play.store import DemoStore
-from rl_donut.rl.circulate import MapRoamer
 from rl_donut.rl.evaluate import legal_duration
 from rl_donut.rl.model import ActorCritic
 from rl_donut.rl.ppo import LearnedPolicy
@@ -60,6 +62,37 @@ def model_from_state(template: ActorCritic, state: dict) -> ActorCritic:
     return copy
 
 
+class HuntingPolicy:
+    """Flies the cave's routes toward the player and shoots when a shot can land.
+
+    The learned policy waits on its spawn. This is the search the match was missing:
+    the same route planner the rusher uses, which stays in the air the map allows.
+    """
+
+    name = "hunter"
+
+    def __init__(self):
+        self.rusher = RusherBot(aim_sigma_deg=2.0, reaction=1)
+
+    def reset(self) -> None:
+        self.rusher._routes.clear()
+        self.rusher.reaction = Reaction()
+
+    def act(self, obs, ctx=None):
+        if ctx is None:
+            raise ValueError("the hunter reads the match")
+        discrete, continuous = self.rusher.act(obs, ctx)
+        return hold_in_air(obs, discrete, continuous)
+
+
+class AirPolicy(LearnedPolicy):
+    """The learned policy, with a step into rock turned off before the engine sees it."""
+
+    def act(self, obs, ctx=None):
+        discrete, continuous = super().act(obs, ctx)
+        return hold_in_air(obs, discrete, continuous)
+
+
 class HumanArena:
     """Holds the live network, the saved matches, and the match the browser is stepping."""
 
@@ -72,7 +105,6 @@ class HumanArena:
         seconds: float = 20.0,
         placement: str | None = None,
         brain: str = "the agent",
-        learn_kwargs: dict | None = None,
         practice_updates: int = 8,
     ):
         if model.obs_dim != OBS_DIM or not model.cont_dim:
@@ -81,7 +113,7 @@ class HumanArena:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.model = model
         self.model.eval()
-        self.policy = LearnedPolicy(self.model, name="learned")
+        self.hunter = HuntingPolicy()
         self.store = DemoStore(self.run_dir / "demos.npz")
         self.seconds = legal_duration(seconds)
         if placement is None:
@@ -92,7 +124,6 @@ class HumanArena:
             self.maps = list(maps)
             self.placement = placement
         self.brain = brain
-        self.learn_kwargs = dict(learn_kwargs or {})
         self.practice_updates = practice_updates
         self.rng = np.random.default_rng(0)
         self.cursor = 0
@@ -135,7 +166,7 @@ class HumanArena:
         self.playing = True
         self.saved = False
         self.taught = False
-        self.policy.roamer = MapRoamer()
+        self.hunter.reset()
         return self._opening()
 
     def step(self, move: int, jet: bool, shoot: bool, aim: float) -> dict:
@@ -157,7 +188,7 @@ class HumanArena:
         discrete[0, 0] = human_discrete
         continuous[0, 0] = human_continuous
         slots = team_slots(self.env, 1)
-        agent_discrete, agent_continuous = self.policy.act(
+        agent_discrete, agent_continuous = self.hunter.act(
             self.obs[0, 1:2], PolicyContext(self.env, slots, self.rng)
         )
         discrete[0, 1] = agent_discrete[0]
@@ -203,6 +234,16 @@ class HumanArena:
         self._save_state(self.run_dir / "ckpt_previous.pt", before)
         self._save_state(self.run_dir / "ckpt_latest.pt", self.model.state_dict())
         ai = self._ai_match(before, report.improved)
+        if self.practice_updates:
+            from rl_donut.play.physics_data import air_legal
+            demos = self.store.demonstrations()
+            kept = int(np.count_nonzero(air_legal(demos)))
+            dropped = len(demos) - kept
+            ai["message"] = (
+                f"Practiced {self.practice_updates} updates inside the match engine, "
+                f"against a moving copy. {dropped} saved controls pointed into rock and were left out. "
+                + ai["message"]
+            )
         self.taught = True
         self.rows = []
         payload = {
@@ -266,8 +307,8 @@ class HumanArena:
 
     def _ai_match(self, before_state: dict, improved: bool) -> dict:
         """The updated actor plays its previous weights. No person is in this match."""
-        current = LearnedPolicy(self.model, name="after")
-        previous = LearnedPolicy(model_from_state(self.model, before_state), name="before")
+        current = AirPolicy(self.model, name="after")
+        previous = AirPolicy(model_from_state(self.model, before_state), name="before")
         index = self.cursor
         self.cursor += 1
         game_map = self.maps[index % len(self.maps)]
