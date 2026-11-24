@@ -81,8 +81,7 @@ class HuntingPolicy:
     def act(self, obs, ctx=None):
         if ctx is None:
             raise ValueError("the hunter reads the match")
-        discrete, continuous = self.rusher.act(obs, ctx)
-        return hold_in_air(obs, discrete, continuous)
+        return self.rusher.act(obs, ctx)
 
 
 class AirPolicy(LearnedPolicy):
