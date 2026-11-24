@@ -59,6 +59,8 @@ def test_a_short_match_is_saved_and_played_back_by_two_agents(tmp_path, duel_map
     np.testing.assert_array_equal(saved.discrete, np.tile([2, 1, 0], (4, 1)))
     np.testing.assert_allclose(saved.continuous, 0.25)
     assert str(saved.player[0]) == "Ada Lovelace"
+    weights = lesson["status"]["weights"]
+    assert "original" in weights and "now" in weights
     assert len(lesson["ai"]["frames"]) == 30
     assert lesson["ai"]["roles"] == ["after", "before"]
     assert "Nobody is playing" in lesson["ai"]["message"]
@@ -72,6 +74,21 @@ def test_a_short_match_is_saved_and_played_back_by_two_agents(tmp_path, duel_map
     arena.forget()
     assert arena.store.count() == 0
     assert (tmp_path / "lessons.jsonl").exists()
+
+
+def test_restore_puts_the_weight_number_back(tmp_path, duel_maps):
+    deck, note = duel_maps
+    arena = HumanArena(tmp_path, _small_model(), deck, placement=note, practice_updates=0)
+    original = arena.status()["weights"]
+    assert original["matches_original"]
+    with torch.no_grad():
+        arena.model.actor_backbone[0].bias.add_(0.4)
+    moved = arena.status()["weights"]
+    assert not moved["matches_original"]
+    assert moved["now"] != original["now"]
+    restored = arena.restore_original()["weights"]
+    assert restored["matches_original"]
+    assert abs(restored["now"] - restored["original"]) < 1e-8
 
 
 def test_the_page_can_start_step_and_teach(tmp_path, duel_maps):

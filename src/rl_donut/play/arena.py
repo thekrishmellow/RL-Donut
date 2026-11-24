@@ -36,6 +36,38 @@ def clean_player(name: str) -> str:
     return text or "you"
 
 
+def _mean_abs(state: dict) -> float:
+    """Average absolute weight. A lesson moves it. Restore puts it back."""
+    total = 0.0
+    count = 0
+    for value in state.values():
+        if not torch.is_floating_point(value):
+            continue
+        flat = value.detach().float().reshape(-1)
+        total += float(flat.abs().sum().item())
+        count += int(flat.numel())
+    return total / max(count, 1)
+
+
+def _recent_lessons(path: Path, limit: int = 4) -> list[dict]:
+    if not path.is_file():
+        return []
+    rows = []
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        rows.append({
+            "before": row.get("logprob_before"),
+            "after": row.get("logprob_after"),
+            "improved": bool(row.get("improved")),
+        })
+    return rows[-limit:]
+
+
 def duel_deck(maps: list[GeneratedMap], limit: int = 32) -> tuple[list[GeneratedMap], str]:
     """Caves from `maps` with the two fighters placed where they can already see each other."""
     if limit < 1:
@@ -133,9 +165,11 @@ class HumanArena:
         self.playing = False
         self.saved = False
         self.taught = False
+        self._teach = None
         base = self.run_dir / "ckpt_base.pt"
         if not base.exists():
             self._save_state(base, self.model.state_dict())
+        self._base_mean = _mean_abs(torch.load(base, map_location="cpu")["model_state"])
 
     def status(self) -> dict:
         return {
@@ -146,6 +180,18 @@ class HumanArena:
             "brain": self.brain,
             "seconds": self.seconds,
             "placement": self.placement,
+            "weights": self._weights(),
+        }
+
+    def _weights(self) -> dict:
+        now = _mean_abs(self.model.state_dict())
+        delta = now - self._base_mean
+        return {
+            "original": self._base_mean,
+            "now": now,
+            "shift": delta,
+            "matches_original": abs(delta) < 1e-8,
+            "lessons": _recent_lessons(self.run_dir / "lessons.jsonl"),
         }
 
     def start(self, seed: int | None = None, seconds: float | None = None) -> dict:
@@ -204,6 +250,12 @@ class HumanArena:
         }
 
     def teach(self, player: str = "you") -> dict:
+        self.begin_teach(player)
+        while self._teach["done_steps"] < self.practice_updates:
+            self.teach_step()
+        return self.finish_teach()
+
+    def begin_teach(self, player: str = "you") -> dict:
         if self.taught:
             raise ValueError("this match is already in the agent")
         if not self.rows and not self.saved:
@@ -218,24 +270,75 @@ class HumanArena:
             continuous = np.stack([row[2] for row in self.rows])
             self.store.append(obs, discrete, continuous, player, int(self.env.world.seeds[0]))
             self.saved = True
-        human_board = scoreboard(self.env)
-        before = {key: value.detach().cpu().clone() for key, value in self.model.state_dict().items()}
+        from rl_donut.play.physics_data import legal_demonstrations
+        from rl_donut.play.selfplay import _mean_log_prob
+        demos = self.store.demonstrations()
+        legal = legal_demonstrations(demos)
         self._lesson += 1
-        from rl_donut.play.selfplay import practice_round
-        report = practice_round(
-            self.model,
-            self.store.demonstrations(),
-            self.maps,
-            updates=self.practice_updates,
-            seconds=self.seconds,
-            seed=self._lesson,
-        )
-        self._save_state(self.run_dir / "ckpt_previous.pt", before)
-        self._save_state(self.run_dir / "ckpt_latest.pt", self.model.state_dict())
-        ai = self._ai_match(before, report.improved)
+        self._teach = {
+            "player": player,
+            "before": {key: value.detach().cpu().clone() for key, value in self.model.state_dict().items()},
+            "human_board": scoreboard(self.env),
+            "done_steps": 0,
+            "legal": legal,
+            "logprob_before": _mean_log_prob(self.model, legal),
+            "trainer": None,
+        }
+        return self._teach_progress()
+
+    def teach_step(self) -> dict:
+        if self._teach is None:
+            raise ValueError("start a lesson first")
+        if self._teach["done_steps"] >= self.practice_updates:
+            return self._teach_progress()
+        from rl_donut.play.selfplay import self_play_updates
+        from rl_donut.rl.ppo import PPOConfig, PPOTrainer
+        if self._teach["trainer"] is None and self.practice_updates:
+            self._teach["trainer"] = PPOTrainer(self.model, PPOConfig(lr=1e-4))
         if self.practice_updates:
-            from rl_donut.play.physics_data import air_legal
-            demos = self.store.demonstrations()
+            self_play_updates(
+                self.model,
+                self.maps,
+                1,
+                n_matches=min(4, len(self.maps)),
+                n_steps=48,
+                seconds=self.seconds,
+                seed=self._lesson + self._teach["done_steps"],
+                aim_coef=0.15,
+                demos=self._teach["legal"] if len(self._teach["legal"]) else None,
+                trainer=self._teach["trainer"],
+            )
+        self._teach["done_steps"] += 1
+        return self._teach_progress()
+
+    def finish_teach(self) -> dict:
+        if self._teach is None:
+            raise ValueError("start a lesson first")
+        from rl_donut.play.learn import LearnReport
+        from rl_donut.play.physics_data import air_legal
+        from rl_donut.play.selfplay import _mean_log_prob
+        lesson = self._teach
+        before_lp = lesson["logprob_before"]
+        after_lp = _mean_log_prob(self.model, lesson["legal"])
+        improved = bool(np.isfinite(before_lp) and np.isfinite(after_lp) and after_lp > before_lp + 1e-4)
+        demos = self.store.demonstrations()
+        latest_id = int(demos.match_id.max()) if len(demos) else 0
+        legal = lesson["legal"]
+        latest_rows = int(np.count_nonzero(legal.match_id == latest_id)) if len(legal) else 0
+        report = LearnReport(
+            rows=len(demos),
+            latest_rows=latest_rows,
+            epochs=self.practice_updates,
+            logprob_before=float(before_lp) if np.isfinite(before_lp) else 0.0,
+            logprob_after=float(after_lp) if np.isfinite(after_lp) else 0.0,
+            logprob_all_before=float(before_lp) if np.isfinite(before_lp) else 0.0,
+            logprob_all_after=float(after_lp) if np.isfinite(after_lp) else 0.0,
+            improved=improved,
+        )
+        self._save_state(self.run_dir / "ckpt_previous.pt", lesson["before"])
+        self._save_state(self.run_dir / "ckpt_latest.pt", self.model.state_dict())
+        ai = self._ai_match(lesson["before"], report.improved)
+        if self.practice_updates:
             kept = int(np.count_nonzero(air_legal(demos)))
             dropped = len(demos) - kept
             ai["message"] = (
@@ -245,15 +348,10 @@ class HumanArena:
             )
         self.taught = True
         self.rows = []
-        payload = {
-            "learned": report.as_dict(),
-            "human": human_board,
-            "ai": ai,
-            "status": self.status(),
-        }
+        self._teach = None
         with (self.run_dir / "lessons.jsonl").open("a") as handle:
             handle.write(json.dumps({
-                "player": player,
+                "player": lesson["player"],
                 "decisions": report.latest_rows,
                 "rows": report.rows,
                 "logprob_before": report.logprob_before,
@@ -262,7 +360,20 @@ class HumanArena:
                 "ai_score": ai["board"]["score"],
                 "ai_damage": ai["board"]["damage"],
             }) + "\n")
-        return payload
+        return {
+            "learned": report.as_dict(),
+            "human": lesson["human_board"],
+            "ai": ai,
+            "status": self.status(),
+        }
+
+    def _teach_progress(self) -> dict:
+        return {
+            "step": self._teach["done_steps"],
+            "total": self.practice_updates,
+            "done": self._teach["done_steps"] >= self.practice_updates,
+            "weights": self._weights(),
+        }
 
     def restore_original(self) -> dict:
         if self.playing or (self.rows and not self.taught):

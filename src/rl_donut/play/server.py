@@ -62,6 +62,12 @@ def _handler(arena: HumanArena):
                         )
                     elif path == "/api/match/teach":
                         payload = arena.teach(body.get("player", "you"))
+                    elif path == "/api/match/teach/begin":
+                        payload = arena.begin_teach(body.get("player", "you"))
+                    elif path == "/api/match/teach/step":
+                        payload = arena.teach_step()
+                    elif path == "/api/match/teach/finish":
+                        payload = arena.finish_teach()
                     elif path == "/api/agent/restore":
                         payload = arena.restore_original()
                     elif path == "/api/demos/forget":

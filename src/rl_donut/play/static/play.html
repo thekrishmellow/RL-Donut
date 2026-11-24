@@ -171,6 +171,53 @@
     color: var(--muted);
   }
   .keys b { color: var(--ink); font-weight: 600; }
+  .weight-dock { display: flex; flex-direction: column; }
+  .weights {
+    background: white;
+    border: 1px solid var(--ink);
+    border-bottom: 0;
+    padding: 12px 12px 10px;
+  }
+  .weights h3 {
+    margin: 0 0 8px;
+    font-family: "Instrument Serif", Georgia, serif;
+    font-size: 22px;
+    font-weight: 400;
+  }
+  .wrow {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    margin: 3px 0;
+  }
+  .wrow span { color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; }
+  .wtrack {
+    margin: 8px 0 6px;
+    height: 8px;
+    background: var(--sand-2);
+    position: relative;
+    overflow: hidden;
+  }
+  .wfill {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: var(--ember);
+    transition: width 0.35s ease, left 0.35s ease;
+  }
+  .wfill.back { background: var(--you); }
+  .wstate { margin: 0; font-size: 13px; line-height: 1.4; }
+  .weights ol {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  #restore { border-radius: 0; }
   @media (max-width: 980px) {
     .shell { grid-template-columns: 1fr; }
     h1 { font-size: 36px; }
@@ -222,8 +269,19 @@
     <p class="note" id="lesson">Nothing has been taught in this sitting yet.</p>
     <p class="note" id="aiNote"></p>
     <p class="note" id="saved">Saved matches load with the page.</p>
-    <div class="stack">
+    <div class="weight-dock">
+      <div class="weights" id="weights">
+        <h3>Weights</h3>
+        <div class="wrow"><span>Original</span><b id="wBase">—</b></div>
+        <div class="wrow"><span>Now</span><b id="wNow">—</b></div>
+        <div class="wrow"><span>Shift</span><b id="wShift">—</b></div>
+        <div class="wtrack" aria-hidden="true"><div class="wfill" id="wFill"></div></div>
+        <p class="wstate" id="wState">Waiting for a lesson.</p>
+        <ol id="wLessons"></ol>
+      </div>
       <button id="restore" type="button">Restore the original agent</button>
+    </div>
+    <div class="stack">
       <button class="ghost" id="forget" type="button">Forget saved matches</button>
     </div>
     <p class="keys"><b>A D</b> or arrows move. <b>W</b> or up jets. Aim with the mouse. Hold <b>J</b>, <b>K</b>, space, or the left button to shoot. Sight is from the body, so turning the gun does not find anyone.</p>
@@ -281,6 +339,39 @@ function paintStatus(status) {
   if (!status) return;
   const who = status.players && status.players.length ? status.players.join(", ") : "no one yet";
   savedEl.textContent = `${status.matches} saved match${status.matches === 1 ? "" : "es"}, ${status.rows} decisions, from ${who}. Brain: ${status.brain}.`;
+  paintWeights(status.weights);
+}
+
+function paintWeights(weights) {
+  if (!weights) return;
+  const base = document.getElementById("wBase");
+  const now = document.getElementById("wNow");
+  const shift = document.getElementById("wShift");
+  const fill = document.getElementById("wFill");
+  const state = document.getElementById("wState");
+  const list = document.getElementById("wLessons");
+  const fmt = (value) => Number(value).toFixed(6);
+  base.textContent = fmt(weights.original);
+  now.textContent = fmt(weights.now);
+  const delta = Number(weights.shift);
+  shift.textContent = `${delta >= 0 ? "+" : ""}${delta.toFixed(6)}`;
+  const width = Math.min(50, Math.abs(delta) * 500000);
+  fill.style.width = `${width}%`;
+  fill.style.left = delta >= 0 ? "50%" : `${50 - width}%`;
+  fill.classList.toggle("back", weights.matches_original);
+  state.textContent = weights.matches_original
+    ? "Now matches the original brain. Restore will not move these numbers."
+    : "A lesson moved the weights. Restore puts Now back on Original.";
+  list.replaceChildren();
+  (weights.lessons || []).forEach((row) => {
+    const item = document.createElement("li");
+    const before = Number(row.before);
+    const after = Number(row.after);
+    item.textContent = row.improved
+      ? `${before.toFixed(2)} → ${after.toFixed(2)}`
+      : `${before.toFixed(2)} stayed`;
+    list.appendChild(item);
+  });
 }
 
 function setBusy(next) {
@@ -521,7 +612,18 @@ async function teach() {
   lessonEl.textContent = "Teaching the agent from your match, and from every match already saved…";
   aiEl.textContent = "";
   try {
-    const data = await post("/api/match/teach", { player: nameOf() });
+    const begun = await post("/api/match/teach/begin", { player: nameOf() });
+    paintWeights(begun.weights);
+    lessonEl.textContent = begun.total
+      ? `Update ${begun.step} of ${begun.total}. The weight number is about to move.`
+      : "Saving the match.";
+    let step = begun;
+    while (!step.done) {
+      step = await post("/api/match/teach/step", {});
+      paintWeights(step.weights);
+      lessonEl.textContent = `Update ${step.step} of ${step.total}. Now ${Number(step.weights.now).toFixed(6)}.`;
+    }
+    const data = await post("/api/match/teach/finish", {});
     const learned = data.learned;
     const before = learned.logprob_before.toFixed(3);
     const after = learned.logprob_after.toFixed(3);
@@ -597,7 +699,7 @@ skipBtn.addEventListener("click", () => {
 document.getElementById("restore").addEventListener("click", async () => {
   try {
     paintStatus(await post("/api/agent/restore", {}));
-    lessonEl.textContent = "The original agent is back. Saved matches are still on file, so the next lesson can teach them again.";
+    lessonEl.textContent = "The original weights are back. The Now number above matches Original. Saved matches are still on file.";
   } catch (err) {
     lessonEl.textContent = err.message;
   }
