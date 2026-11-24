@@ -1,8 +1,9 @@
-"""Play the learned agent in the browser, then watch it use what you just did.
+"""Play a cave in the browser, then teach the learned weights from that match.
 
-You are the blue fighter. The current network is red. Your controls are saved with
-every other person's. At the end of the match the actor is updated from that file,
-and the new weights play the weights from before the lesson, with nobody at the keyboard.
+You are the blue fighter. Red is the hunter: it flies the cave toward you and shoots
+on line of sight. Your controls are saved with every other person's. End and teach
+runs four practice updates. The bout afterwards is the new weights against the weights
+from before the lesson, with nobody at the keyboard.
 
     .venv/bin/python scripts/play_human.py
     .venv/bin/python scripts/play_human.py --checkpoint runs/spawn-curriculum-14/ckpt_tiles_8.pt

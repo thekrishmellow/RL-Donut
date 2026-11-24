@@ -27,6 +27,7 @@ self-play, and are evaluated on maps they have never seen.
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | Progress report: what is finished, the training measurements, and what is left |
 | [`docs/RL-Donut-technical-report.pdf`](docs/RL-Donut-technical-report.pdf) | Technical report for submission: decisions, methods, and the measured training result |
 | [`docs/REPORT.md`](docs/REPORT.md) | Earlier sign-off. Read `docs/PROGRESS.md` for the current result |
+| [`docs/RL-Donut-learning-guide.pdf`](docs/RL-Donut-learning-guide.pdf) | Teaching guide: the roadmap, the training dashboard, and the play page |
 | [`docs/bots.md`](docs/bots.md) | Phase 4: the policy interface, scripted bots, replays and the renderer |
 | [`docs/handoff_phase5_6.md`](docs/handoff_phase5_6.md) | For the teammate building Phases 5–6: what exists, the interface contract, every step and decision, the merge checklist |
 | [`docs/plan_phase7_10.md`](docs/plan_phase7_10.md) | Implementation notes from Phase 7 through the report |
@@ -66,11 +67,14 @@ map generation depends on its random number streams, and the golden tests will f
 .venv/bin/python scripts/bench_env.py --state                  # full MatchEnv.step speed by batch size, split by part
 .venv/bin/python scripts/bench_env.py --processes 1 2 4 8 --batches 256   # several env processes at once
 .venv/bin/python scripts/train_spawn_curriculum.py --updates 400       # PPO vs a static bot; widens the spawn gap after a 50% win rate
+.venv/bin/python scripts/train_duel_selfplay.py                        # PPO against a frozen copy of the same policy
 .venv/bin/python -m streamlit run scripts/dashboard.py                 # training logs and pictures; refreshes every 3 seconds
-.venv/bin/python scripts/play_human.py                                 # play the agent in the browser; your matches teach the next one
+.venv/bin/python scripts/play_human.py                                 # browser match against the hunter; End and teach updates the weights
 ```
 
-`scripts/play_human.py` serves http://127.0.0.1:8765. You are team blue. The view stays on you. Team red is the learned policy, and both sides start on the cave’s own spawns. Your controls are saved in `runs/human-play/` (git-ignored). `scripts/train_duel_selfplay.py` trains that policy against a moving copy of itself.
+`scripts/play_human.py` serves http://127.0.0.1:8765. You are team blue. The view stays on you. Team red is a hunter: it flies the cave’s routes toward you and shoots when it can see you. Both sides start on the cave’s own spawns. End and teach runs four practice updates, and the weight card moves after each one. Restore reloads the original brain and keeps the saved matches. Forget deletes the matches and keeps the brain. Saved matches and checkpoints stay in `runs/human-play/` (git-ignored).
+
+The training dashboard is http://127.0.0.1:8501. It reads `runs/*/metrics.jsonl` only, so a lesson from the play page does not show up there. `scripts/train_duel_selfplay.py` is the self-play trainer: the opponent is a frozen copy of the policy, refreshed every update.
 
 The train, val and test maps are already built and committed in `data/maps/`; load them with
 `rl_donut.mapgen.load_split("train")`. Rebuild only after changing the generator (see the
@@ -133,7 +137,9 @@ RL-Donut/
 │   ├── route_check.py
 │   ├── preview_rifle.py
 │   ├── view_match.py          Debug viewer: one match as a GIF and a filmstrip
-│   ├── play_human.py          Browser match: a person vs the agent, then the agent vs its previous weights
+│   ├── play_human.py          Browser match: you against the hunter, then a lesson on the learned weights
+│   ├── train_duel_selfplay.py PPO against a frozen copy of the same policy
+│   ├── dashboard.py           Training-log viewer. Does not read play lessons
 │   ├── bench_engine.py        Engine speed check
 │   ├── bench_env.py           Full environment speed benchmark
 │   ├── aim_ceiling.py         Hit-rate ceiling of each aim design
@@ -147,4 +153,6 @@ RL-Donut/
 ```
 
 `src/rl_donut/rl/` holds PPO, rewards, the spawn-distance curriculum, the map roam used when no
-enemy is in view, and the dashboard loaders. The dashboard script is `scripts/dashboard.py`.
+enemy is in view, and the dashboard loaders.
+
+`src/rl_donut/play/` is the browser match. During the match the opponent is the rusher. End and teach practices in the match engine and keeps a control only when it does not enter rock. The copying lesson and the scripted gun are not in this package.
