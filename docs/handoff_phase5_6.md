@@ -1,5 +1,11 @@
 # Handoff: Phases 5–6 (rewards, PPO, self-play)
 
+**Status note, 24 November 2026.** This handoff was written before the two halves merged.
+PyTorch is installed, training steps `MatchEnv`, and the play page is on `main`. Sentences
+below that say PyTorch is not installed, or that the stand-in is still the training
+environment, describe that earlier moment. Current measurements are in `docs/PROGRESS.md`.
+Phases 5–10 are not marked finished in `DESIGN.md`.
+
 This guide is for the teammate building **Phase 5 (rewards and PPO against bots)** and
 **Phase 6 (self-play, opponent pool, Elo, 1v1 then 2v2)** while the rest of the team
 builds Phases 3–4 (RL interface, bots, renderer, replays) on top of the finished engine. The two halves are

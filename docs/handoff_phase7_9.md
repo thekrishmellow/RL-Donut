@@ -1,5 +1,11 @@
 # Phases 7–9: what is left, who writes it, how it merges
 
+**Status note, 24 November 2026.** This note was written when the dashboard file did not
+exist and some Phase 5 edits were only on one machine. `scripts/dashboard.py` is on `main`
+and reads `runs/*/metrics.jsonl`. The learning code is on `main`. Where the table below
+says the dashboard has no file, or that Phase 5 is not on `origin/main`, that sentence is
+the old state. Current measurements are in `docs/PROGRESS.md`.
+
 Share this file. Your friend builds it on a branch from `origin/main` and opens three pull requests. You merge those into `main`. Phase 5 stays yours.
 
 Repo: [github.com/thekrishmellow/RL-Donut](https://github.com/thekrishmellow/RL-Donut)

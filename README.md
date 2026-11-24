@@ -4,7 +4,7 @@ A Mini Militia-inspired 2D arena for multi-agent reinforcement learning. Agents 
 jetpacks and rifles fight on procedurally generated cave maps, learn through PPO and
 self-play, and are evaluated on maps they have never seen.
 
-**Status:** Phases 1–4 are complete: maps, engine, the 330-number observation, bots, replays, and the viewer. The learning code for Phases 5–10 is on `main` and steps `MatchEnv`. Training is not finished. The latest run, `runs/spawn-curriculum-14`, won 8 of 16 validation matches when the enemy started 6–12 tiles away and in sight, then 4 of 16 at 12–16 tiles. It never reached the official spawns, which hide the teams from each other. `docs/REPORT.md` is an earlier sign-off and is not that result. The current measurements are in `docs/PROGRESS.md`.
+**Status:** Phases 1–4 are complete: maps, engine, the 330-number observation, bots, replays, and the viewer. The learning code for Phases 5–10 is on `main` and steps `MatchEnv`. Training is not finished. The latest run, `runs/spawn-curriculum-14`, won 8 of 16 validation matches when the enemy started 6–12 tiles away and in sight, then 4 of 16 at 12–16 tiles. It never reached the official spawns, which hide the teams from each other. The earlier sign-off is in `archived/REPORT.md` and is not that result. The current measurements are in `docs/PROGRESS.md`.
 
 **For evaluators**
 
@@ -26,7 +26,7 @@ self-play, and are evaluated on maps they have never seen.
 | [`docs/interface.md`](docs/interface.md) | The RL interface: actions, observations, the batched environment, with the measurements behind each choice |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | Progress report: what is finished, the training measurements, and what is left |
 | [`docs/RL-Donut-technical-report.pdf`](docs/RL-Donut-technical-report.pdf) | Technical report for submission: decisions, methods, and the measured training result |
-| [`docs/REPORT.md`](docs/REPORT.md) | Earlier sign-off. Read `docs/PROGRESS.md` for the current result |
+| [`docs/REPORT.md`](docs/REPORT.md) | Pointer. The earlier sign-off is [`archived/REPORT.md`](archived/REPORT.md). Read `docs/PROGRESS.md` for the current result |
 | [`docs/RL-Donut-learning-guide.pdf`](docs/RL-Donut-learning-guide.pdf) | Teaching guide: the roadmap, the training dashboard, and the play page |
 | [`docs/bots.md`](docs/bots.md) | Phase 4: the policy interface, scripted bots, replays and the renderer |
 | [`docs/handoff_phase5_6.md`](docs/handoff_phase5_6.md) | For the teammate building Phases 5–6: what exists, the interface contract, every step and decision, the merge checklist |

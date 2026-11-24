@@ -1,5 +1,12 @@
 # RL-Donut: implementation plan from Phase 7 to the end
 
+**Status note, 24 November 2026.** The milestone table in section 1.1 is corrected for what
+is on `main` now. Later sections are the plan as it was written. Some of them still say a
+Phase 5 change is not on `origin/main`, that the dashboard has not been started, or that
+the reward is about to gain see-enemy and approach bonuses. Those bonuses are not in
+`src/rl_donut/rl/rewards.py`. Where a later section disagrees with `docs/PROGRESS.md`, use
+`docs/PROGRESS.md`.
+
 This plan takes the project from where it stands today to the final report. It is written
 for the teammate who builds it. It covers the context, the order of work, the code to
 write in each phase, every decision with a default, and how each piece merges into `main`.
@@ -44,8 +51,8 @@ they have never seen. The work follows a 12-milestone brief:
 | 8 | Cooperation and competition (2v2) | 6 | code partly done |
 | 9 | Adaptive opponent training | 7 | code drafted |
 | 10 | Unseen-environment generalization | 8 | code drafted |
-| 11 | Interactive dashboard | 9 | not started |
-| 12 | Benchmarking and evaluation | 10 | not started |
+| 11 | Interactive dashboard | 9 | code on main (`scripts/dashboard.py`); reads training logs only |
+| 12 | Benchmarking and evaluation | 10 | earlier sign-off in `archived/REPORT.md`; not a finished benchmark |
 
 How work is done: discuss a choice (why, alternatives, a measurement), approve, build with
 tests, review, commit. Approved choices go into `DESIGN.md` with an ID. Phases 7–10 have no
@@ -100,7 +107,11 @@ Each step, agent reward = sparse + α × shaping.
 
 A full match with no fighting returns −0.45 from step penalties alone.
 
-### 1.5 What Phase 5 has measured
+### 1.5 What Phase 5 had measured when this plan was written
+
+These rows are earlier experiments. They are not `runs/spawn-curriculum-14`. The run to
+quote is in `docs/PROGRESS.md`: 8 of 16 at 6–12 tiles in sight, then 4 of 16 at 12–16
+tiles. The 81 percent row below is an empty-room check from before that curriculum.
 
 All of these are 16 matches of 60 s on held-out maps, against a static bot that never shoots:
 
@@ -122,7 +133,7 @@ What that shows:
 3. **More training erases skill.** Every run peaked, then got worse. One continuation took an 81% policy to 0% within 50 updates. Only held-out win rate, kills and damage track skill. Logged return does not, because α changes the step penalty.
 4. **Shaping toward the enemy has been too weak.** One step closer pays 0.0004 at 0.001 per tile, or 0.0008 at 0.002, against the −0.0005 step penalty. The entropy bonus that keeps actions random is worth about 0.036 per step.
 
-The Phase 5 reward terms (sight bonus, closer bonus), the practice maps (`rl/practice.py`) and the trainer flags (`--in-view`, `--close-spawns`, `--corner-spawns`, `--resume`, `--hold-shaping`, `--eval-every`) are on a local machine only. They are not on `origin/main` yet. They will merge later, as Phase 5's pull request.
+The sight bonus and the closer bonus are not in the reward on `main`. `src/rl_donut/rl/rewards.py` pays a win or a loss, plus a fading term for kills, deaths, damage, a step cost, and a pit fall. The spawn-distance ladder that was actually measured is `scripts/train_spawn_curriculum.py`, and its log is `runs/spawn-curriculum-14`.
 
 ### 1.6 Known bugs on `origin/main` that Phases 7–10 must fix
 

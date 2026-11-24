@@ -1,6 +1,6 @@
 # Submission notes
 
-15 November 2026. For evaluators of RL-Donut.
+15 November 2026. Updated 24 November 2026. For evaluators of RL-Donut.
 
 This page is the project brief: what was built, which number to trust, how to run it,
 and what is still open. The technical report is
@@ -87,7 +87,7 @@ the first 60 percent of the scheduled steps.
 | Rung | Best check | What happened next |
 |---|---|---|
 | 6–12 tiles, enemy already in sight | Update 175: 8 of 16 wins, 1.81 kills, 273 damage | The gate opened. Weights: `runs/spawn-curriculum-14/ckpt_tiles_8.pt` |
-| 12–16 tiles, still in sight, still inside the 30-tile rifle | 4 of 16 wins, about 0.6 kills and 120 damage | Later checks fell to 1 of 16. The gate stayed shut. `ckpt_tiles_14.pt` is the first time the rung reached 4 of 16 (update 225), not a later tie |
+| 12–16 tiles, still in sight, still inside the 30-tile rifle | 4 of 16, more than once. First time is update 225: 0.31 kills, 78 damage. Update 325, also 4 of 16, has 0.62 kills and 120 damage | The gate stayed shut. Later checks are 1, 2, 3, or 4 of 16. `ckpt_tiles_14.pt` is update 225, the first 4 of 16, not the higher-damage later check |
 | 16–28 tiles, then the official spawns | Not run | The ladder stopped here |
 
 Both of those rungs start with a line of sight. The official spawns are about 64 tiles
@@ -97,8 +97,9 @@ A second scoring of the two checkpoints, same seed and match length, found that 
 tile weights do not beat the 6–12 tile weights on the longer maps (3 of 16 wins and about
 90 damage, against 3 of 16 and about 80 damage). Sixteen matches is a wide interval: 8 of
 16 has a Wilson 95 percent interval of about 0.28 to 0.72. The damage drop is the clearer
-fact. Entropy at the end of the log is 3.25. A new policy of this shape starts near 3.9,
-so the actions never became sharp. The aim spread on these checkpoints is about 59 degrees.
+fact. Entropy at the end of the log is 3.25. That number includes the aim cloud. A fresh
+policy under the same definition starts near 3.9. The three button heads alone top out near
+2.48, which is what the current code logs. The aim spread on these checkpoints is about 59 degrees.
 A standing body at 14 tiles is about 7 degrees tall, so most samples miss even when the
 mean points at the enemy.
 
@@ -130,10 +131,13 @@ one-shot test-split benchmark, and Bradley-Terry ratings are implemented. They w
 the evaluation of `spawn-curriculum-14`. The dashboard tabs for Elo, generalization, and
 the benchmark are empty for this run because those files were not written.
 
-[`docs/REPORT.md`](REPORT.md) is an earlier sign-off. It says the twelve milestones are
-fulfilled and includes a test-split table of 0 wins. Its run folders are not in this
-clone. Do not grade the project from that file. Grade it from this page, from
-[`docs/PROGRESS.md`](PROGRESS.md), and from the PDF.
+[`archived/REPORT.md`](../archived/REPORT.md) is an earlier sign-off. It says the twelve
+milestones are fulfilled, quotes an 81 percent close-range win rate, and writes a reward
+with see-enemy and approach bonuses. That reward is not in `src/rl_donut/rl/rewards.py`.
+The file also includes a test-split table of 0 wins. Its run folders are not in this
+clone. [`docs/REPORT.md`](REPORT.md) only points at the archive. Do not grade the project
+from either file. Grade it from this page, from [`docs/PROGRESS.md`](PROGRESS.md), and
+from the PDF.
 
 ## Setup
 
@@ -167,6 +171,20 @@ To continue training:
 
 That starts a new network. It does not resume the saved checkpoint. The new run will use
 the 6 degree aim cap and the floor roam.
+
+A person can play at http://127.0.0.1:8765:
+
+```bash
+.venv/bin/python scripts/play_human.py
+```
+
+You are blue. Red, during that match, is the rusher. It flies the cave toward you and
+shoots on line of sight. It is not the learned policy, and it is allowed your true
+position, so the fight is not a validation match. End and teach runs four short updates
+on the learned weights. The training dashboard does not show those lessons, because they
+are not written to `metrics.jsonl`. A separate self-play log,
+`runs/genuine-selfplay`, has 186 updates and no validation win rate. Do not read it as
+the 8 of 16.
 
 The PDF can be rebuilt after `pip install reportlab`, which is not required to train or
 to view the dashboard:

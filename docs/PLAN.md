@@ -13,7 +13,7 @@ open. It is a living document; update it whenever a phase lands or a plan change
 | [`docs/handoff_phase5_6.md`](handoff_phase5_6.md) | Guide for the teammate building Phases 5–6 in parallel: interface contract, steps, merge checklist |
 | [`docs/SUBMISSION.md`](SUBMISSION.md) | Notes for evaluators: setup, which result to grade, and what is still open |
 | [`docs/PROGRESS.md`](PROGRESS.md) | What is finished, the training measurements, and what is left |
-| [`docs/REPORT.md`](REPORT.md) | Earlier sign-off. The current result is in `PROGRESS.md` |
+| [`archived/REPORT.md`](../archived/REPORT.md) | Earlier sign-off. The current result is in `PROGRESS.md` |
 | [`README.md`](../README.md) | Setup, everyday commands, repository layout |
 
 Status markers used below: **approved** (in `DESIGN.md`, may be built), **draft** (a
@@ -74,7 +74,7 @@ tooling, `M` map generator; later phases add their own letters).
 | 7 | Adaptive opponents, style policies | 9 | code on main; no official-spawn result |
 | 8 | Generalization evaluation (held-out and OOD maps) | 10 | code on main; no official-spawn result |
 | 9 | Dashboard | 11 | code on main; reads `runs/` |
-| 10 | Benchmarks and final report | 12 | earlier draft in `docs/REPORT.md`; current numbers are in `docs/PROGRESS.md` |
+| 10 | Benchmarks and final report | 12 | earlier draft in `archived/REPORT.md`; current numbers are in `docs/PROGRESS.md` |
 
 Phases 5–10 are not approved as finished. The code is on `main`. The latest training run is
 `runs/spawn-curriculum-14`: 8 of 16 wins at 6–12 tiles with the enemy in sight, then 4 of 16

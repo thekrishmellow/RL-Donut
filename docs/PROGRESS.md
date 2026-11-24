@@ -1,6 +1,6 @@
 # RL-Donut — progress report
 
-15 November 2026
+15 November 2026. Updated 24 November 2026.
 
 RL-Donut is a two-person project: a Mini Militia-style 2D game built as a reinforcement
 learning environment. Agents with jetpacks and rifles fight on cave maps that are generated
@@ -8,8 +8,9 @@ from a seed, learn by playing, and are later tested on maps they have never seen
 
 The plan has twelve phases. The environment side is complete, including the scripted
 opponents, replays and a viewer. The learning code is on `main` and steps that environment.
-Training has started and is not finished. The latest measured run is below. `docs/REPORT.md`
-is an earlier sign-off and does not replace these numbers.
+Training has started and is not finished. The measured curriculum is below. The earlier
+sign-off is in `archived/REPORT.md`. It does not replace these numbers. Its reward formula,
+with see-enemy and approach bonuses, is not the reward in `src/rl_donut/rl/rewards.py`.
 
 ## How the work is done
 
@@ -242,9 +243,9 @@ In parallel, the learning half has been written through to self-play:
 - styled opponents (aggressive, defensive, sniper) and tests on maps and physics the agent
   was not trained on.
 
-That code now steps the real environment: discrete move, jetpack and shoot, plus a
-continuous aim angle, and the 330-number observation. The numbers in the learning guide
-were measured on the earlier stand-in.
+That code steps the real environment: discrete move, jetpack and shoot, plus a continuous
+aim angle, and the 330-number observation. The curriculum numbers below were measured on
+that environment, against a static bot.
 
 ## Training so far
 
@@ -255,36 +256,72 @@ rungs that were actually trained keep the enemy in sight and inside the 30-tile 
 | Rung | Best validation result | What happened next |
 |---|---|---|
 | 6–12 tiles, enemy in sight | 8 of 16 wins at update 175, 1.81 kills, 273 damage | The 50% gate opened. Checkpoint: `ckpt_tiles_8.pt` |
-| 12–16 tiles, still in sight | 4 of 16 wins, about 0.6 kills and 120 damage | Later checks fell to 1 of 16. The gate stayed shut |
+| 12–16 tiles, still in sight | 4 of 16 wins, more than once | The first 4 of 16 is update 225: 0.31 kills, 78 damage. That file is `ckpt_tiles_14.pt`. A later 4 of 16, update 325, has 0.62 kills and 120 damage. Checks after that are 1, 2, 3, or 4 of 16. The gate stayed shut |
 | 16–28 tiles, beyond rifle range, and the official hidden spawns | Not run | The ladder stopped on the 12–16 tile rung |
 
 A separate check of those two checkpoints, same seed and match length, found that the
 12–16 tile weights do not beat the 6–12 tile weights on the longer maps (3 of 16 wins and
 about 90 damage, against 3 of 16 and about 80 damage). Both checkpoints aimed with a spread
-of about 59 degrees. A standing body at 14 tiles is about 7 degrees tall.
+of about 59 degrees. A standing body at 14 tiles is about 7 degrees tall. Sixteen matches
+is a wide interval: 8 of 16 has a Wilson 95 percent range of about 0.28 to 0.72.
+
+The entropy in this log includes the aim cloud. A fresh policy under that definition sits
+near 3.9. Update 175 logs 3.47, and the run ends at 3.25. The three button heads alone
+cannot exceed about 2.48. The current code logs only those heads, so a later file near 2.0
+is not “half as random” as 3.47.
 
 After that run, the aim spread was capped at 6 degrees and the entropy bonus stopped
 paying the policy to widen it. When no enemy is seen or remembered, the learner roams the
 map's floors instead of standing still, and the learned aim returns as soon as an enemy is
-in the observation. Those two changes are not inside the checkpoints above. A new network
-with the 4-degree aim, before any training, scored about one kill every 30 seconds when the
-enemy started in view. On four official maps the roam covered 22–39 tiles in 60 seconds and
-did not see the static enemy.
+in the observation. Those two changes are not inside the checkpoints above. Loading an old
+checkpoint still clamps the stored spread to 6 degrees at aim time, which is a different
+gun from the one that was trained. A new network with the 4-degree aim, before any
+training, scored about one kill every 30 seconds when the enemy started in view. On four
+official maps the roam covered 22–39 tiles in 60 seconds and did not see the static enemy.
+
+## Self-play log
+
+`runs/genuine-selfplay/metrics.jsonl` has 186 updates and walks the 6–12, 12–16, and 16–28
+tile stages. It records mean return, entropy, and an aim loss. It does not record a
+validation win rate. The last line is update 186, stage tiles_20, mean return about −0.05,
+entropy about 2.0 on the discrete-only scale. That file is a health log of the update, not
+a win-rate result. The opponent pool and Elo are in the code. They are not this run, and
+they are not the 8 of 16.
+
+## The play page
+
+`scripts/play_human.py` serves http://127.0.0.1:8765. You are blue. The caves are the first
+32 official validation maps, so the teams start where the cave placed them. The red fighter
+during that match is the rusher: it flies the generator's routes toward your true position
+and shoots on line of sight, with about 2 degrees of aim error. It is not the learned
+network. The learned weights are what End and teach updates, four practice steps at
+learning rate 0.0001. Rock presses are left out. The aim fit is squared angle error, not
+the narrow Gaussian, because that Gaussian wiped weights to non-finite values. After the
+lesson, the new weights play the previous weights. The weight card is the average absolute
+parameter. It is a fingerprint of whether a lesson touched the file, not a skill score.
+Restore reloads the original brain and keeps the saved matches. Forget deletes the matches
+and keeps the brain.
+
+The training dashboard on port 8501 reads `runs/*/metrics.jsonl` only. A play lesson writes
+`runs/human-play/lessons.jsonl` and does not appear on that dashboard.
 
 ## Tests and write-up
 
-525 tests are collected. Guides describe the map generator, the engine, the learning
-interface, and the handoff between the two halves. `docs/REPORT.md` records an earlier
-sign-off, including a test-split table of 0 wins. Use this file for the current result.
+525 tests were collected when this note was first written. Guides describe the map
+generator, the engine, the learning interface, and the handoff between the two halves.
+`archived/REPORT.md` is the earlier sign-off, including a test-split table of 0 wins. Use
+this file for the current result.
 
 ## What is left
 
 | Remaining work | Why it matters |
 |---|---|
-| Retrain with the 6-degree aim cap | The saved checkpoints were trained while the spread stayed near 59 degrees |
-| A rung the policy can actually clear between 8 tiles and 16 tiles | The 12–16 tile rung peaked at 4 of 16 and then declined |
+| Retrain with the 6-degree aim cap, and stop when wins stop rising | The saved checkpoints were trained while the spread stayed near 59 degrees. Update 600 is not the policy to keep |
+| Make a finished kill worth more than healable damage | 100 damage and one kill are both 0.30 in the shaping term, and health returns at 10 per second after 3 quiet seconds |
+| A wider validation check | 8 of 16 opened the gate. The Wilson interval is about 0.28 to 0.72 |
+| A rung the policy can clear between 8 tiles and 16 tiles | The 12–16 tile rung never held 8 of 16 |
 | Search from the official spawns | The teams start hidden. Roaming the floors did not produce a sighting in the four maps that were checked |
-| Self-play, generalization, and a report that matches these measurements | The code for those phases is on `main`. The numbers in `docs/REPORT.md` are the earlier sign-off |
+| Self-play with a validation win rate, after a policy that can shoot | The code is on main. `genuine-selfplay` does not record wins |
 
 The route planner is cached per map. The next measurement is a training run that starts
 from the capped aim, on the 6–12 tile rung, and stops when the validation wins stop rising.

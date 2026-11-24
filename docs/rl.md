@@ -3,14 +3,18 @@
 This document is Team B's step-by-step development guide and decision table for
 **Phase 5 (rewards, PPO, curriculum)** and **Phase 6 (self-play, opponent pool, Elo, 2v2)**.
 
-At the end of Phase 4, the decisions in this document will be moved into the root
-[`DESIGN.md`](../DESIGN.md) during the branch merge.
+**Status note, 24 November 2026.** "Code" in the table means the module is on `main`.
+`DESIGN.md` does not mark Phases 5–10 approved or finished. The measurements are in
+`docs/PROGRESS.md`. These decisions were not copied into `DESIGN.md`.
+
+At the end of Phase 4, the decisions in this document were going to be moved into the root
+[`DESIGN.md`](../DESIGN.md) during the branch merge. That copy did not happen.
 
 | Related document | Role |
 |---|---|
 | [`docs/handoff_phase5_6.md`](handoff_phase5_6.md) | Contract interface, steps, and merge checklist between Team A and Team B |
 | [`docs/PLAN.md`](PLAN.md) | Whole-project plan and milestones |
-| [`DESIGN.md`](../DESIGN.md) | Main project decision log (Phases 0–2) |
+| [`DESIGN.md`](../DESIGN.md) | Decision log. Phases 1–4 are logged as done. Phases 5–10 are not |
 
 ---
 
@@ -18,19 +22,19 @@ At the end of Phase 4, the decisions in this document will be moved into the roo
 
 | Step | Status | Scope |
 |---|---|---|
-| **5.1** | **done** | Tools, PyTorch pin, and Team B guide (`docs/rl.md`) |
-| **5.2** | **done** | Stand-in environment (`StandInEnv`) and contract test (`tests/test_env_contract.py`) |
-| **5.3** | **done** | Reward function and shaping (`rl_donut.rl.rewards`) |
-| **5.4** | **done** | PPO implementation (`rl_donut.rl.ppo`) |
-| **5.5** | **done** | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
-| **5.6** | **done** | Logging, exploit watchlist, checkpoint manager |
-| **5.7** | **done** | Curriculum (static target → random bot → pits) |
-| **5.8** | **done** | Evaluation against fixed bots (`scripts/eval_bots.py`, `evaluate.py`) |
-| **6.1** | **done** | Checkpoint snapshot pool (`rl_donut.rl.pool`) |
-| **6.2** | **done** | Opponent sampling (PFSP + latest self + bots) |
-| **6.3** | **done** | Offline Elo round-robin (`rl_donut.rl.elo`, `scripts/elo_round_robin.py`) |
-| **6.4** | **done** | 1v1 self-play training run (`scripts/train_selfplay.py`) |
-| **6.5** | **done** | 2v2 cooperative-competitive training (`rl_donut.rl.mappo`) |
+| **5.1** | code | Tools, PyTorch pin, and Team B guide (`docs/rl.md`) |
+| **5.2** | code | Stand-in environment (`StandInEnv`) and contract test (`tests/test_env_contract.py`) |
+| **5.3** | code | Reward function and shaping (`rl_donut.rl.rewards`). No see-enemy or approach bonus |
+| **5.4** | code | PPO implementation (`rl_donut.rl.ppo`) |
+| **5.5** | code | Training runner with opponents (`scripts/train.py`, `rl_donut.rl.runner`) |
+| **5.6** | code | Logging, exploit watchlist, checkpoint manager |
+| **5.7** | code | Curriculum. The measured ladder is spawn distance, not a finished pit curriculum |
+| **5.8** | code | Evaluation against fixed bots (`scripts/eval_bots.py`, `evaluate.py`) |
+| **6.1** | code | Checkpoint snapshot pool (`rl_donut.rl.pool`) |
+| **6.2** | code | Opponent sampling (PFSP + latest self + bots). Not the 8-of-16 run |
+| **6.3** | code | Offline Elo round-robin (`rl_donut.rl.elo`, `scripts/elo_round_robin.py`) |
+| **6.4** | code | 1v1 self-play training script (`scripts/train_selfplay.py`). No validation win rate in `runs/genuine-selfplay` |
+| **6.5** | code | 2v2 cooperative-competitive training (`rl_donut.rl.mappo`) |
 | **6.6** | planned | Final format evaluation (1v1 vs 2v2) |
 
 ---
